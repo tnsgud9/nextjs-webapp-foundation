@@ -4,9 +4,10 @@ import "./globals.css";
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/toast";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { ThemeProvider } from "@/components/theme-provider"
+import { ThemeProvider } from "@/components/theme-provider";
+import { QueryProvider } from "@/components/query-provider";
 
-const notoSans = Noto_Sans({subsets:['latin'],variable:'--font-sans'});
+const notoSans = Noto_Sans({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
   title: "Create Next App",
@@ -21,7 +22,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col">
-         <ThemeProvider
+        <QueryProvider>
+          <ThemeProvider
             attribute="class"
             defaultTheme="system"
             enableSystem
@@ -31,7 +33,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             <Toaster>
               <TooltipProvider>{children}</TooltipProvider>
             </Toaster>
-         </ThemeProvider>
+          </ThemeProvider>
+        </QueryProvider>
       </body>
     </html>
   );
