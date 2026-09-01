@@ -33,7 +33,7 @@ export const env = {
   supabasePublishableKey: parsed.data.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
 } as const;
 
-/** Whether every Supabase variable is set. Without them, session refresh and the like are skipped. */
+/** Whether every Supabase variable is set. Without them, Supabase is skipped. */
 export const hasSupabaseEnvVars = Boolean(
   env.supabaseUrl && env.supabasePublishableKey,
 );
