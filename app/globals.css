@@ -130,3 +130,4 @@
     @apply font-sans;
   }
 }
+@import "./shared.css";

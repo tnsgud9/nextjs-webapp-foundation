@@ -1,13 +1,15 @@
 import type { Metadata } from "next";
 import { Noto_Sans } from "next/font/google";
 import "./globals.css";
-import { cn } from "@/lib/utils";
+import { cn } from "cn";
 import { Toaster } from "@/components/ui/toast";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
 import { QueryProvider } from "@/components/query-provider";
 
-const notoSans = Noto_Sans({ subsets: ["latin"], variable: "--font-sans" });
+// Fallback for the characters Pretendard and Pretendard JP lack (other scripts); app/shared.css lists
+// --font-noto-sans after them. Not preloaded, so a page downloads it only when it shows such characters.
+const notoSans = Noto_Sans({ variable: "--font-noto-sans", preload: false, adjustFontFallback: false });
 
 export const metadata: Metadata = {
   title: "Create Next App",

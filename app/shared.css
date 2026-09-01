@@ -1,0 +1,31 @@
+/*
+ * Project styles. app/globals.css is managed by shadcn, so do not edit it; put theme token
+ * overrides, extra tokens, utilities, and base styles here.
+ * (globals.css imports this file last, so it joins the same Tailwind build and takes precedence.)
+ */
+
+/*
+ * Pretendard in its official subset: one file per weight (100-900), each holding Latin, symbols, and the
+ * 2,350 common Hangul syllables of KS X 1001. The browser downloads only the weights a page uses. The files
+ * are bundled, so they are served from this origin with long-lived caching.
+ * Pretendard JP comes next for Japanese: its faces cover only Japanese characters (unicode-range), so
+ * pages without Japanese text never download it.
+ * Noto Sans (next/font in app/layout.tsx, through --font-noto-sans) covers the characters neither has;
+ * system fonts come last.
+ */
+@import "./fonts/pretendard/pretendard.css";
+@import "./fonts/pretendard-jp/pretendard-jp.css";
+
+@theme inline {
+  /*
+   * Pretendard as the default sans font, Pretendard JP for Japanese, Noto Sans for other scripts, then system
+   * fonts while they load or for missing characters. The var() fallback keeps the list valid where
+   * --font-noto-sans is not set.
+   */
+  --font-sans:
+    "Pretendard", "Pretendard JP", var(--font-noto-sans, "Noto Sans"), -apple-system, BlinkMacSystemFont, system-ui, Roboto, "Helvetica Neue", "Segoe UI",
+    "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol",
+    sans-serif;
+  /* Monospace text uses the system's monospace fonts, so the build downloads no font */
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
