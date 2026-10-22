@@ -1,0 +1,12 @@
+// Main schema: only the generator and datasource blocks.
+// Models and enums go in prisma/models/<domain>.prisma. All files merge into one
+// namespace, so a relation can reference a model in another file without an import.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}

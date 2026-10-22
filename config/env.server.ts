@@ -9,9 +9,19 @@ import { z } from "zod";
  * there would leak into the client bundle, so always add secrets here.
  * Add each variable a feature needs to the schema and expose it through `serverEnv`.
  */
-const serverEnvSchema = z.object({});
+const serverEnvSchema = z.object({
+  /**
+   * PostgreSQL connection string for the app runtime (Prisma Client).
+   * On Supabase, use the Supavisor transaction pooler (6543).
+   * `DIRECT_URL` for migrations is read only by the Prisma CLI, so it is not here.
+   */
+  DATABASE_URL: z.url().optional(),
+});
 
-const parsed = serverEnvSchema.safeParse({});
+const parsed = serverEnvSchema.safeParse({
+  // Treat an empty string (`FOO=`) as unset.
+  DATABASE_URL: process.env.DATABASE_URL || undefined,
+});
 
 if (!parsed.success) {
   throw new Error(
@@ -19,4 +29,6 @@ if (!parsed.success) {
   );
 }
 
-export const serverEnv = {} as const;
+export const serverEnv = {
+  databaseUrl: parsed.data.DATABASE_URL,
+} as const;
