@@ -1,9 +1,159 @@
 <!-- BEGIN:nextjs-agent-rules -->
 
-# This is NOT the Next.js you know
+## This is NOT the Next.js you know
 
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
 
 This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
 <!-- END:nextjs-agent-rules -->
+
+# Project guidelines
+
+This is a web application built on the Next.js App Router. Keep shared infrastructure (`lib/`, `components/ui/`, `components/shared/`, `config/`) free of domain-specific names and business logic; put domain code in `data/`, the routes under `app/`, and each domain's own module.
+
+## Structure
+
+```
+app/                     # Routes (App Router)
+├── (design-system)/     # /design-system UI showcase (closed in production unless NEXT_PUBLIC_DESIGN_SYSTEM=1)
+├── **/_components/      # Components used by a single route
+├── api/health/          # Liveness check (no database access)
+├── fonts/               # Pretendard official subset and Pretendard JP, one file per weight (loaded from app/shared.css)
+├── generated/prisma/    # Generated Prisma Client
+├── playwright/          # Pages built only for Playwright (page.playwright.tsx)
+├── globals.css          # shadcn/Tailwind base styles (managed by shadcn, do not edit)
+├── shared.css           # Project styles: theme token overrides, extra tokens, utilities
+├── error.tsx            # Unexpected page errors (generic message + digest)
+├── global-error.tsx     # Root layout failures
+├── not-found.tsx        # Unknown routes and notFound()
+├── icon.svg             # Neutral placeholder site icon (replace with the service icon)
+└── layout.tsx           # Root layout · global providers
+components/
+├── ui/                  # shadcn/ui source (managed by the shadcn CLI, do not edit)
+├── shared/              # Derived and composed components (wrap ui to extend it)
+└── *-provider.tsx       # Client providers
+config/
+├── env.ts               # Public environment variables (NEXT_PUBLIC_*)
+└── env.server.ts        # Server-only environment variables
+data/                    # Data access layer (server-only): the only code that queries the database
+hooks/                   # Client hooks
+├── use-mobile.ts        # From shadcn (sidebar), do not edit
+└── use-highlighted-code.ts # From shadcn (code-block), do not edit
+test-utils/              # Test-only helpers: shared/ (tool-agnostic), then vitest/, playwright/
+lib/
+├── auth.ts              # Requester identity: getCurrentUser() / requireUser() (server-only)
+├── csp.ts               # Content-Security-Policy, shared by next.config.ts and the proxy
+├── db.ts                # Single Prisma Client instance (server-only), imported only by data/
+├── highlighter.tsx      # Shiki code highlighter from shadcn (code-block), do not edit
+├── problem.ts           # Shared RFC 9457 error contract: Problem, ProblemError, ActionResult
+├── ky.ts                # HTTP client
+├── query-client.ts      # TanStack Query client
+├── sentry/              # Sentry: options.ts (shared), server.ts, client.ts
+├── server/              # Server-only: error → Problem mapping, error handlers, input validation
+├── supabase/            # Supabase browser / server clients, session refresh
+└── utils.ts             # cn re-export (shadcn alias)
+prisma/
+├── schema.prisma        # generator / datasource
+└── models/              # Models, one file per domain
+.github/                 # CI workflow (workflows/ci.yml) and its shared setup action
+Dockerfile               # Production image (standalone output); .dockerignore keeps .env out
+docker-compose.yaml      # Development database for pnpm dev (docker:db) and the app container (docker:up)
+docker-compose.test.yaml # Test-only Postgres for local runs (pnpm test:db:up / test:db:down)
+instrumentation.ts       # Server start-up entry (loads lib/sentry/server), onRequestError
+instrumentation-client.ts # Browser start-up entry (loads lib/sentry/client)
+prisma7.config.ts        # Prisma CLI config
+proxy.ts                 # Request proxy (Supabase session refresh)
+```
+
+## Commands
+
+- Use pnpm only.
+- Do not lower `minimumReleaseAge` in `pnpm-workspace.yaml`. Only an urgent security fix may go into `minimumReleaseAgeExclude`, one package at a time, and it comes out once the version is 7 days old. Fix a `pnpm audit` failure by updating the package, not by lowering the audit level.
+- Verify changes with `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `pnpm build`. CI (`.github/workflows/ci.yml`) runs these pnpm scripts, plus `prisma validate`, a `prisma format` diff check, and `pnpm audit`; add a new check as a pnpm script first.
+- Node is pinned in `.nvmrc` and `engines`; change both together. CI passes `.nvmrc` to `NODE_VERSION` in `Dockerfile`, whose default only serves local builds.
+- Never hard-code the project name or tool versions in CI or Docker files. Read Node from `.nvmrc` and pnpm from `packageManager`. The one exception is the Postgres image, whose tag appears in `ci.yml`, `docker-compose.yaml`, and `docker-compose.test.yaml`; change the three together.
+- Docker: keep development and service containers in `docker-compose.yaml` and test-only services in `docker-compose.test.yaml`. Never copy `.env` into an image, add per-variable `ARG` / `ENV` lines, or pass secrets as build arguments: the build receives one env file through the BuildKit secret `build-env`, and the runtime receives container environment variables. The image never runs migrations. The app container reads the same `DATABASE_URL` as everything else; never add a second, container-only database variable.
+- Test files are named after the tool that runs them and sit next to the code they cover: `*.vitest.test.ts` (`pnpm test:vitest`) and `*.playwright.test.ts` (`pnpm test:playwright`). `pnpm test` runs all. A new tool gets its own suffix, script, and `test-utils/<tool>/`.
+- Put shared test setup and helpers in `test-utils/<tool>/` instead of repeating them in test files; code both tools need goes in `test-utils/shared/`, which imports no test tool. Vitest already mocks Sentry (`sentryReports()`) and `next/headers` globally (`test-utils/vitest/setup.ts`); use `fakeSupabaseAuth()` when a test needs a signed-in user.
+- Tests never reach a real external service and need no secrets. The database is a real local Postgres (`docker-compose.test.yaml`, started with `pnpm test:db:up`; CI starts the same image). Keep test services in `docker-compose.test.yaml`, separate from any development compose file; Supabase Auth is the fake server in `test-utils/shared/supabase-auth.ts`; Sentry is mocked or intercepted. Never point tests at the Supabase project or the database in `.env`.
+- Vitest projects: `unit` (no external dependencies, parallel) and `db` (`data/**` and `test-utils/**` tests, real database, emptied before each test, one file at a time). Test `data/` functions against the database, including authorization for another user's resource; tests above `data/` mock the `data/` functions they call. Each test creates its own data. `pnpm test:vitest` and `pnpm test:playwright` fail when the database is down; `pnpm test:vitest:unit` skips it.
+- When you change error mapping, input validation, the error handlers, `lib/auth.ts`, or the ESLint boundary, update the matching Vitest test in the same change. Run Playwright when you change error pages, security headers, page sign-in handling, or Sentry setup.
+- Pages that exist only for Playwright go in `app/playwright/` as `page.playwright.tsx`; never give them a plain `page.tsx` name, or they ship to production.
+- Database: `pnpm db:generate` / `db:migrate` / `db:deploy` / `db:studio`
+
+## Rules
+
+### Server / client boundary
+- Folders group code by feature, not by runtime. The runtime boundary is enforced per module: a server-only module starts with `import "server-only"`, a client-only module with `import "client-only"`. Shared modules import neither and must not import a guarded module. Names such as `*.server.ts` or `lib/server/` are hints, not guards.
+- Add the guard to every new module that reads server secrets, touches the database, uses `next/headers` / `next/server`, or depends on browser-only APIs.
+- Prisma Client values (`@/prisma/client`) are imported only in `data/**`, `lib/db.ts`, and `lib/server/**` (enforced by ESLint). Elsewhere use `import type`, and `@/prisma/browser` for `Decimal`, enums, and `JsonNull`.
+
+### Security boundary (client → server)
+Every Server Action and Route Handler is a public endpoint that anyone can call with any input, whether or not the UI uses it. Prisma bypasses RLS, so the server code is the only line of defense.
+
+- **Data access layer**: only `data/**` imports `@/lib/db` (enforced by ESLint), and server secrets (`@/config/env.server`) are read only in `data/**` and server-only `lib/` modules. Every `data/` function authenticates with `@/lib/auth`, authorizes the requester against the specific resource (ownership, tenant, role), and then queries.
+- **Identity**: get the requester only from `getCurrentUser()` / `requireUser()` in `@/lib/auth`. Never trust a user ID, role, or tenant ID sent by the client, and never use Supabase `getSession()` for auth decisions. `requireUser()` rejects Supabase anonymous users; pass `allowAnonymous: true` only where anonymous use is intended.
+- **Lint boundary**: the ESLint boundary matches restricted modules by the end of the path (aliased or relative), also rejects dynamic `import()` / `require()` of them, and covers `.js` files. In `data/`, use `db` only as `db.<model>` / `db.$...`; never rename, return, pass on, or export it. Never bypass it with `eslint-disable`.
+- **Return values**: `data/` functions return DTOs with only the fields the caller needs, never raw Prisma records. The same applies to Server Action return values and props passed to Client Components; everything there is serialized to the browser.
+- **Mass assignment**: never pass client input straight into Prisma `data` / `where`. Validate with a `.strict()` zod schema and build the Prisma arguments field by field.
+- **Server Actions**: a `"use server"` file exports only actions. Each action validates its arguments, then calls `data/`; it never queries the database itself. Do not capture secrets in actions defined inside components.
+- **Pages**: Server Components read through `data/` as well. A page that requires sign-in calls `requirePageUser()` (redirects to `SIGN_IN_PATH`), never `requireUser()`. Turn a missing or forbidden resource into `notFound()` so its existence is not revealed. The proxy only refreshes sessions and protects nothing.
+- **Error pages**: `app/error.tsx` and `app/global-error.tsx` never render the error message, only the digest. Do not add a root `loading.tsx`: it streams every page, and `redirect()` / `notFound()` then answer 200 instead of 307 / 404. Add `loading.tsx` per route segment instead.
+- **Rate limiting**: there is none yet; Supabase Auth limits its own endpoints. Before releasing an endpoint that repeated calls can abuse (sends email or SMS, calls a paid API, creates data, accepts anonymous callers), limit it in the Server Action or Route Handler before calling `data/`. Key the limit by the requester's user ID, or the client IP for anonymous callers, keep the counters in a store every server instance shares (never process memory), and answer an exceeded limit with a 429 `ProblemError`.
+- **Security headers**: keep the headers in `next.config.ts` on every route. Relax a single directive for the route that needs it instead of removing a header. The CSP is built in `lib/csp.ts`; pages get a per-request nonce from the proxy, so they always render dynamically. Content loads only from this origin, and connections go only to this origin, Supabase, and Sentry; add a new external origin to the one directive that needs it. Never add `'unsafe-inline'` to `script-src`; give a new inline or third-party script the nonce from the `x-nonce` request header.
+
+Audit checklist for any change that adds or edits an endpoint:
+1. Which `data/` function does it reach, and does that function authenticate and authorize for this exact resource?
+2. Is every input (body, search params, FormData, route params, action arguments) validated with a strict schema?
+3. Can a client-controlled value select another user's or tenant's data?
+4. Does the response, action result, or Client Component prop contain more than the UI needs?
+5. Can repeated calls cause cost or abuse, and if so, is the endpoint rate-limited?
+
+### Environment variables
+- Never read `process.env` directly. Add public variables to the zod schema in `config/env.ts` and server-only variables to `config/env.server.ts`, then use them from there. The only exceptions are build-time values outside app code: `CI` and `PLAYWRIGHT` in `next.config.ts` and the `SENTRY_*` build variables read by the Sentry plugin, `NEXT_OUTPUT_STANDALONE` in `next.config.ts` (set only by `Dockerfile`), the test-only `TEST_DATABASE_URL` read in `test-utils/shared/test-database.ts` (tests do not load `.env`, so it is not in `.env.example`), and `NODE_ENV`, which Next.js sets and inlines at build time.
+- Never expose secrets as `NEXT_PUBLIC_*`.
+- Add every new variable to `.env.example` with a description.
+
+### Database
+- Put models in `prisma/models/<domain>.prisma`. Keep `generator` / `datasource` only in `prisma/schema.prisma`.
+- Query only inside the data access layer (`data/**`), through `db` from `@/lib/db`. Do not create new Prisma Client instances.
+- Import generated types from `@/prisma/client`, and enum values used in client code from `@/prisma/browser`. Do not edit `app/generated/` by hand.
+- The runtime connects with `DATABASE_URL` (transaction pooler); the CLI connects with `DIRECT_URL` (session pooler).
+- Change the schema only through Prisma migrations. `pnpm test:vitest` fails when the schema has changes that no migration in `prisma/migrations` covers. Applying them to production (`db:deploy`) is not part of the build.
+- Prisma bypasses RLS, so enforce authorization in server code.
+- Data API exposure and automatic RLS are Supabase project settings, not migrations (see README "Supabase project settings"). Do not grant `anon` / `authenticated` or disable RLS on a table unless it is meant to be reached through the Data API; when it is, add the grants and policies in a migration.
+- Primary keys: `id String @id @default(uuid(7)) @db.Uuid`, and foreign keys referencing them as `String @db.Uuid`. Never use `autoincrement()` IDs (guessable). The UUID is generated by Prisma Client, not the database, so any insert outside Prisma must supply `id`; never add a `gen_random_uuid()` (v4) default.
+- Users: store the Supabase user ID (from `requireUser()`) as a `String @db.Uuid` column with an index, without a foreign key or relation to `auth.users`. Clean up a deleted user's rows in app code.
+- Model conventions: snake_case names through `@@map` / `@map`, `DateTime` as `@db.Timestamptz`, `Decimal` (never `Float`) for money, and an explicit `@@index` on every foreign key column.
+- Pin `prisma`, `@prisma/client`, and `@prisma/adapter-pg` to the same exact version.
+
+### Server endpoints
+- Wrap every exported Route Handler in `withRouteErrorHandler()` and every exported Server Action in `withActionErrorHandler()` (both from `@/lib/server/error-handlers`). Route Handlers return their own `Response` on success. Do not hand-roll `try`/`catch` error responses.
+- Map errors to Problems only in `@/lib/server/error-mapper`. Expected failures become Problems and are not reported. In Route Handlers, unexpected errors become a 500 Problem, are reported to Sentry, and carry the event ID as `errorId`. Server Actions rethrow unexpected errors, so `onRequestError` reports them and `error.tsx` shows the digest. Do not call `Sentry.captureException` for errors that already flow through the error handlers.
+
+### Observability
+- Sentry setup lives in `lib/sentry/`: `options.ts` (the only place for init options), `server.ts` (Node / Edge), `client.ts` (browser). The root `instrumentation.ts` / `instrumentation-client.ts` only load these, because Next.js looks for them at the root. Keep data collection minimal (no user info, cookies, headers, bodies, query parameters); enabling more needs a stated reason.
+- `/api/health` stays a cheap liveness check: no database, no external calls, no internal state in the response.
+- Validate all external input (JSON body, search params, FormData, route params, action arguments) with zod through `@/lib/server/validation` before using it. An invalid route param means not found: `parseParams()` throws a 404 Problem in Route Handlers, and `parsePageParams()` calls `notFound()` in pages.
+- Failures are RFC 9457 Problems (`@/lib/problem`). Signal expected failures by throwing `ProblemError`: pass a status number for status-only failures, or a domain problem type.
+- Define domain problem types in the domain's own module with `defineProblemType()`, never in `lib/problem.ts`. Keep those modules free of server-only imports so the client can compare `type` values. Never rename a released type.
+- Status rules: client input validation 400, conflict with current state 409, valid input that breaks a business rule 422, missing target 404, auth 401/403, rate limit exceeded 429.
+- `detail` and extension members reach the client, so keep internal details out of them. Clients branch on `type` only, never on `title` or `detail`.
+- Server Actions return expected failures in `ActionResult`; forms handle only those. Never rely on a thrown error's message reaching the client.
+- The error handlers do not authenticate. Authentication and authorization happen in the `data/` functions each handler and action calls.
+- On the client, read failures with `getProblem()` from `@/lib/ky` (Route Handlers) or `ActionResult.problem` (Server Actions).
+
+### Data fetching
+- Make HTTP calls through `lib/ky.ts`. TanStack Query (`lib/query-client.ts`) owns the retry policy.
+- Data the server can read directly is read in Server Components through `data/` functions, not fetched again from the client.
+
+### UI
+- `components/ui/` is shadcn registry source, and so are the files the shadcn CLI adds outside it with a component: `hooks/use-mobile.ts`, `hooks/use-highlighted-code.ts`, and `lib/highlighter.tsx`. Never edit these files; shadcn updates overwrite them. When `shadcn add` writes a new file outside `components/ui/`, add it to this list and to the structure tree. Give project hooks and modules names of their own.
+- When you need a variation, create a derived component in `components/shared/`. Import from `@/components/ui/*` and wrap it (default props, className, extra cva variants, composition) instead of copying and modifying the source file.
+- Put components used by a single route in that route's `_components/`.
+- `app/globals.css` is managed by shadcn. Never edit it; put project styles (theme token overrides, extra tokens, `@utility`, base styles) in `app/shared.css`, which `globals.css` imports last.
+- Add: `pnpm dlx shadcn@latest add <component>`
+- Update: review the changes with `pnpm dlx shadcn@latest add <component> --diff`, then apply them with `--overwrite`. Derived components wrap the source, so check that they still work after an update.
+- Merge classes with `import { cn } from "cn"`.
+- Every component in `components/ui/` and `components/shared/` appears in the `/design-system` showcase: use it in a card in `app/(design-system)/components/cards/` and register the card in `showcase.tsx`. Route-only `_components/` and providers are not included. `showcase.vitest.test.ts` fails when a component or card is missing.

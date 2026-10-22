@@ -40,6 +40,11 @@ next-env.d.ts
 
 /app/generated/prisma
 
+# AI agent tooling (local state)
+.omc/
+.codex/
+.claude/settings.local.json
+
 # playwright
 /test-results/
 /playwright-report/
