@@ -5,6 +5,7 @@
   "exclude": [
     "node_modules",
     "test-utils",
+    "docs",
     "**/*.vitest.test.ts",
     "**/*.playwright.test.ts",
     "vitest.config.mts",

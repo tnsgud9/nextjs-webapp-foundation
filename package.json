@@ -22,7 +22,8 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:status": "prisma migrate status",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "docs:affected": "node docs/key-files.mts"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
