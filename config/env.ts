@@ -19,6 +19,8 @@ const envSchema = z.object({
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: z.string().trim().min(1).optional(),
   /** Sentry DSN. Public because the browser reports errors too. Sentry is disabled when it is unset. */
   NEXT_PUBLIC_SENTRY_DSN: z.url().optional(),
+  /** `1` opens the /design-system showcase. The development server always opens it. */
+  NEXT_PUBLIC_DESIGN_SYSTEM: z.literal("1").optional(),
 });
 
 const parsed = envSchema.safeParse({
@@ -28,6 +30,7 @@ const parsed = envSchema.safeParse({
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || undefined,
   NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN || undefined,
+  NEXT_PUBLIC_DESIGN_SYSTEM: process.env.NEXT_PUBLIC_DESIGN_SYSTEM || undefined,
 });
 
 if (!parsed.success) {
@@ -45,3 +48,11 @@ export const env = {
 export const hasSupabaseEnvVars = Boolean(
   env.supabaseUrl && env.supabasePublishableKey,
 );
+
+/**
+ * Whether the /design-system showcase is open. It is closed by default so production does not expose it,
+ * and opens only on the development server (`pnpm dev`) or in a build with `NEXT_PUBLIC_DESIGN_SYSTEM=1`.
+ * Both are fixed at build time.
+ */
+export const isDesignSystemEnabled =
+  process.env.NODE_ENV === "development" || parsed.data.NEXT_PUBLIC_DESIGN_SYSTEM === "1";

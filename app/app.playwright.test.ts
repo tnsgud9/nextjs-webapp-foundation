@@ -71,6 +71,8 @@ test.describe("responses", () => {
 
   test("status codes: 404 for unknown routes, 500 for server errors, 307 for sign-in", async ({ request }) => {
     expect((await request.get("/does-not-exist")).status()).toBe(404);
+    // Production builds keep the showcase closed without NEXT_PUBLIC_DESIGN_SYSTEM=1.
+    expect((await request.get("/design-system")).status()).toBe(404);
 
     const serverError = await request.get("/playwright/server-error");
     expect(serverError.status()).toBe(500);

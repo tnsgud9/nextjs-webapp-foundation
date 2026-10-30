@@ -1,6 +1,8 @@
 import { type Metadata } from "next"
+import { notFound } from "next/navigation"
 
 import DesignSystemShowcase from "@/app/(design-system)/components/showcase"
+import { isDesignSystemEnabled } from "@/config/env"
 
 
 export const metadata: Metadata = {
@@ -10,6 +12,9 @@ export const metadata: Metadata = {
 }
 
 export default function DesignSystemPage() {
+  // Not exposed in production; isDesignSystemEnabled in config/env.ts decides when it opens.
+  if (!isDesignSystemEnabled) notFound()
+
   return (
     <DesignSystemShowcase />
   )
