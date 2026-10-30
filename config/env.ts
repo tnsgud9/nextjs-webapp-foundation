@@ -11,6 +11,8 @@ import { z } from "zod";
  * `process.env[key]` is undefined in the client bundle.
  */
 const envSchema = z.object({
+  /** App name in page titles and anywhere the UI shows it. Defaults to "Web App". */
+  NEXT_PUBLIC_APP_NAME: z.string().trim().min(1).optional(),
   /** Supabase project URL. Supabase is disabled when it is unset. */
   NEXT_PUBLIC_SUPABASE_URL: z.url().optional(),
   /** Supabase publishable(anon) key. */
@@ -21,6 +23,7 @@ const envSchema = z.object({
 
 const parsed = envSchema.safeParse({
   // Treat an empty string (`FOO=`) as unset so the default applies.
+  NEXT_PUBLIC_APP_NAME: process.env.NEXT_PUBLIC_APP_NAME || undefined,
   NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL || undefined,
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || undefined,
@@ -32,6 +35,7 @@ if (!parsed.success) {
 }
 
 export const env = {
+  appName: parsed.data.NEXT_PUBLIC_APP_NAME ?? "Web App",
   supabaseUrl: parsed.data.NEXT_PUBLIC_SUPABASE_URL,
   supabasePublishableKey: parsed.data.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
   sentryDsn: parsed.data.NEXT_PUBLIC_SENTRY_DSN,
