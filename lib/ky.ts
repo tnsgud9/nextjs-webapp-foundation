@@ -1,4 +1,5 @@
 import ky, { HTTPError } from "ky";
+import { isProblem, type Problem } from "@/lib/problem";
 
 /**
  * The project's single HTTP client: a general-purpose requester not tied to any API server.
@@ -25,11 +26,22 @@ export const api = ky.create({
 });
 
 function extractMessage(data: unknown): string | undefined {
+  // This project's server answers with RFC 9457 Problems (`lib/problem.ts`).
+  if (isProblem(data)) return data.detail ?? data.title;
   if (typeof data === "string") return data || undefined;
   if (data && typeof data === "object" && "message" in data) {
     const { message } = data as { message?: unknown };
     if (typeof message === "string") return message;
   }
+  return undefined;
+}
+
+/**
+ * Returns the body of a failed response when it is a Problem (`application/problem+json`).
+ * Use it to branch on `type` or to show `errors` on form fields.
+ */
+export function getProblem(error: unknown): Problem | undefined {
+  if (error instanceof HTTPError && isProblem(error.data)) return error.data;
   return undefined;
 }
 
