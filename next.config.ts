@@ -15,8 +15,18 @@ const securityHeaders = [
   { key: "Strict-Transport-Security", value: "max-age=31536000" },
 ];
 
+/**
+ * Playwright test pages (`page.playwright.tsx` under `app/playwright/**`) become routes only in a
+ * `PLAYWRIGHT=1` build. A normal build does not treat them as pages and never compiles them.
+ */
+const pageExtensions = ["tsx", "ts", "jsx", "js"];
+
 const nextConfig: NextConfig = {
+  pageExtensions:
+    process.env.PLAYWRIGHT === "1" ? ["playwright.tsx", ...pageExtensions] : pageExtensions,
   poweredByHeader: false,
+  // The build type-checks app code only (tsconfig.build.json); `pnpm typecheck` covers tests too.
+  typescript: { tsconfigPath: "tsconfig.build.json" },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

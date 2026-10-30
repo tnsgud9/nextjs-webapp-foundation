@@ -1,0 +1,13 @@
+// For the production build (next build) only. It type-checks app code alone, so changing or removing tests, test
+// utilities, or test tool configs never affects a deploy. `pnpm typecheck` (CI) checks everything with tsconfig.json.
+{
+  "extends": "./tsconfig.json",
+  "exclude": [
+    "node_modules",
+    "test-utils",
+    "**/*.vitest.test.ts",
+    "**/*.playwright.test.ts",
+    "vitest.config.mts",
+    "playwright.config.ts"
+  ]
+}

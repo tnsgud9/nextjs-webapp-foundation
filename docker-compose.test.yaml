@@ -1,0 +1,25 @@
+# Test-only Postgres for the Vitest `db` project (the default address in test-utils/shared/test-database.ts).
+# Start and stop it with `pnpm test:db:up` / `pnpm test:db:down`. The development and production databases are
+# unrelated to it. Data lives only in memory (tmpfs) and disappears when the container stops.
+# Keep the image on the same major version as Supabase, and change it together with the CI service container
+# (.github/workflows/ci.yml).
+# The project name is `name` from package.json plus -test (passed by pnpm), so it never mixes with the development
+# Compose project.
+name: ${npm_package_name:?run it through pnpm test:db:up / test:db:down}-test
+
+services:
+  db:
+    image: postgres:17-alpine
+    ports:
+      - "127.0.0.1:5433:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: app_test
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "app_test"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
