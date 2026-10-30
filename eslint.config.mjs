@@ -2,6 +2,58 @@ import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
 
+// Modules restricted by the server resource boundary, matched by the end of the import path so
+// aliased and relative paths are both caught. `source` is the same match as a regex for dynamic
+// import() / require() (it uses `\x2F` instead of `/` because it sits inside an esquery selector).
+const RESTRICTED = {
+  db: {
+    group: ["**/db"],
+    source: String.raw`\x2Fdb$`,
+    message:
+      "Use the database only in the data access layer (data/). Call a data/ function, which authenticates and authorizes.",
+  },
+  prismaValues: {
+    // Every generated Prisma module except the browser build.
+    group: ["@/prisma/*", "!@/prisma/browser", "**/generated/prisma/*", "!**/generated/prisma/browser"],
+    source: String.raw`(^@|\x2Fgenerated)\x2Fprisma\x2F(?!browser$)`,
+    allowTypeImports: true,
+    message:
+      "Import Prisma Client values only in data/, lib/db.ts, and lib/server/. Use `import type` for types and `@/prisma/browser` for Decimal and enums.",
+  },
+  serverEnv: {
+    group: ["**/env.server"],
+    source: String.raw`\x2Fenv\.server$`,
+    message: "Read server secrets only in data/ and server-only modules in lib/.",
+  },
+};
+
+/** Blocks static import / export-from together with dynamic import() / require(), with a string or template literal. */
+function restrictImports(...entries) {
+  return {
+    "@typescript-eslint/no-restricted-imports": [
+      "error",
+      {
+        patterns: entries.map(({ group, allowTypeImports, message }) => ({
+          group,
+          allowTypeImports,
+          message,
+        })),
+      },
+    ],
+    "no-restricted-syntax": [
+      "error",
+      ...entries.flatMap(({ source, message }) => [
+        { selector: `ImportExpression[source.value=/${source}/]`, message },
+        { selector: `ImportExpression[source.quasis.0.value.cooked=/${source}/]`, message },
+        { selector: `CallExpression[callee.name="require"][arguments.0.value=/${source}/]`, message },
+        { selector: `CallExpression[callee.name="require"][arguments.0.quasis.0.value.cooked=/${source}/]`, message },
+      ]),
+    ],
+  };
+}
+
+const ALL_SOURCES = ["**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}"];
+
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
@@ -24,6 +76,57 @@ const eslintConfig = defineConfig([
     files: ["components/ui/**", "hooks/use-mobile.ts"],
     rules: {
       "react-hooks/set-state-in-effect": "off",
+    },
+  },
+  // Server resource boundary: the database and server secrets are reached only through the data
+  // access layer (data/). A later block overrides an earlier one for the same rule, so later blocks
+  // cover narrower paths and allow more. JS files are included too (allowJs in tsconfig).
+  {
+    name: "server boundary: default",
+    files: ALL_SOURCES,
+    rules: restrictImports(RESTRICTED.db, RESTRICTED.prismaValues, RESTRICTED.serverEnv),
+  },
+  {
+    name: "server boundary: lib",
+    files: ["lib/**"],
+    rules: restrictImports(RESTRICTED.db, RESTRICTED.prismaValues),
+  },
+  {
+    name: "server boundary: lib/server",
+    files: ["lib/server/**"],
+    rules: restrictImports(RESTRICTED.db),
+  },
+  {
+    name: "server boundary: lib/db",
+    files: ["lib/db.ts"],
+    rules: {
+      "@typescript-eslint/no-restricted-imports": "off",
+      "no-restricted-syntax": "off",
+    },
+  },
+  {
+    // data/ may query through db but never hand it out: db is imported under its own name and used
+    // only as `db.<model>` / `db.$...`, so it cannot be re-exported, returned, or passed on.
+    // data/ functions only ever export authorized results (DTOs).
+    name: "server boundary: data access layer",
+    files: ["data/**"],
+    rules: {
+      "@typescript-eslint/no-restricted-imports": "off",
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: `:matches(ExportNamedDeclaration, ExportAllDeclaration)[source.value=/${RESTRICTED.db.source}/]`,
+          message: RESTRICTED.db.message,
+        },
+        {
+          selector: `ImportDeclaration[source.value=/${RESTRICTED.db.source}/] > :matches(ImportNamespaceSpecifier, ImportSpecifier[local.name!="db"])`,
+          message: RESTRICTED.db.message,
+        },
+        {
+          selector: `Identifier[name="db"]:not(.object):not(ImportSpecifier > Identifier)`,
+          message: RESTRICTED.db.message,
+        },
+      ],
     },
   },
 ]);
