@@ -1,3 +1,4 @@
+import { withSentryConfig } from "@sentry/nextjs/config";
 import type { NextConfig } from "next";
 import { contentSecurityPolicy } from "./lib/csp";
 
@@ -21,4 +22,12 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+/**
+ * Sentry build settings. The Sentry build plugin reads SENTRY_AUTH_TOKEN, SENTRY_ORG, and SENTRY_PROJECT
+ * for source map upload straight from the environment. Without them it skips the upload and the build continues.
+ * Uploaded source maps are deleted from the build output by default (`deleteSourcemapsAfterUpload`), so they are never public.
+ */
+export default withSentryConfig(nextConfig, {
+  silent: !process.env.CI,
+  widenClientFileUpload: true,
+});

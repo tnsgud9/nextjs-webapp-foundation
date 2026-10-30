@@ -1,5 +1,7 @@
 "use client";
 
+import * as Sentry from "@sentry/nextjs";
+import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Empty,
@@ -15,12 +17,19 @@ import {
  *
  * The error itself is never shown. In production Next replaces Server Component errors with a
  * generic message and a `digest`, so only the `digest` is shown, to match against the server log.
+ *
+ * Errors with a `digest` were already reported on the server (`instrumentation.ts`); only
+ * browser errors are sent to Sentry here.
  */
 export default function ErrorPage({ error, retry }: { error: unknown; retry: () => void }) {
   const digest =
     error instanceof Error && "digest" in error && typeof error.digest === "string"
       ? error.digest
       : undefined;
+
+  useEffect(() => {
+    if (!digest) Sentry.captureException(error);
+  }, [error, digest]);
 
   return (
     <Empty className="flex-1">

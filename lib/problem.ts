@@ -5,8 +5,8 @@
  * - Failures fully described by the status code use `type: "about:blank"` with the HTTP status phrase as `title`.
  * - Domain-specific failures are defined with `defineProblemType()` in each domain module. This file
  *   holds only the app-wide types.
- * - Route Handlers return the Problem as the response body; Server Actions return it in `ActionResult`
- *   (in production, the message of an error a Server Action throws never reaches the client).
+ * - Route Handlers return the Problem as the response body; Server Actions return only expected
+ *   failures in `ActionResult`. Unexpected Server Action errors are handled by `error.tsx`.
  */
 
 /**

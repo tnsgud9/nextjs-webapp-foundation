@@ -1,10 +1,10 @@
 import "server-only";
 import type { NextRequest } from "next/server";
 import type { ActionResult } from "@/lib/problem";
-import { mapErrorToProblem } from "./error-mapper";
+import { mapErrorToProblem, mapExpectedError } from "./error-mapper";
 
 /**
- * Error handlers per server entry point. Both catch errors, turn them into Problems with `mapErrorToProblem()`,
+ * Error handlers per server entry point. They only turn errors into Problems through `error-mapper`
  * and send them out in the shape each entry point needs. The success path is untouched.
  *
  * They do no authentication, authorization, or input validation; each handler and action checks those
@@ -37,8 +37,9 @@ export function withRouteErrorHandler<Context = unknown>(
  * Wraps a Server Action and returns its result as `ActionResult`. Export the wrapped function as-is
  * from the `"use server"` file. It takes the same arguments, so it also works with `useActionState`.
  *
- * In production, the message of an error a Server Action throws never reaches the client, so
- * thrown errors become a return value carrying the Problem (`{ ok: false, problem }`).
+ * Expected failures become a return value carrying the Problem (`{ ok: false, problem }`) for the form
+ * to handle. Unexpected errors are rethrown: Next reports them through `onRequestError`, and the nearest
+ * `error.tsx` shows only the digest (the approach Next recommends).
  */
 export function withActionErrorHandler<Args extends unknown[], T>(
   action: (...args: Args) => Promise<T>,
@@ -47,7 +48,9 @@ export function withActionErrorHandler<Args extends unknown[], T>(
     try {
       return { ok: true, data: await action(...args) };
     } catch (error) {
-      return { ok: false, problem: mapErrorToProblem(error) };
+      const problem = mapExpectedError(error);
+      if (!problem) throw error;
+      return { ok: false, problem };
     }
   };
 }

@@ -4,7 +4,7 @@ import { env } from "../config/env";
  * Content-Security-Policy, shared by `next.config.ts` (every response) and `proxy.ts` (page requests).
  *
  * - Everything loads from this origin only (`default-src 'self'`). Images and fonts may also be inline data, and the
- *   browser may connect only to this origin and the Supabase project, so injected markup cannot send data
+ *   browser may connect only to this origin, the Supabase project, and Sentry, so injected markup cannot send data
  *   elsewhere. Add a service's other origins to the directive that needs them.
  * - Without a nonce, `script-src 'self'` blocks inline scripts, so a page the proxy skips (its matcher leaves out
  *   image and font URLs) fails closed instead of running injected scripts.
@@ -16,7 +16,7 @@ import { env } from "../config/env";
  */
 const origin = (url: string | undefined) => (url ? new URL(url).origin : "");
 const supabase = origin(env.supabaseUrl);
-const connectSources = ["'self'", supabase, supabase.replace(/^http/, "ws")].filter(Boolean);
+const connectSources = ["'self'", supabase, supabase.replace(/^http/, "ws"), origin(env.sentryDsn)].filter(Boolean);
 
 const BASE_DIRECTIVES = [
   "default-src 'self'",

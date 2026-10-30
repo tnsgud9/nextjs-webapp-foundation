@@ -15,6 +15,8 @@ const envSchema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.url().optional(),
   /** Supabase publishable(anon) key. */
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: z.string().trim().min(1).optional(),
+  /** Sentry DSN. Public because the browser reports errors too. Sentry is disabled when it is unset. */
+  NEXT_PUBLIC_SENTRY_DSN: z.url().optional(),
 });
 
 const parsed = envSchema.safeParse({
@@ -22,6 +24,7 @@ const parsed = envSchema.safeParse({
   NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL || undefined,
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || undefined,
+  NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN || undefined,
 });
 
 if (!parsed.success) {
@@ -31,6 +34,7 @@ if (!parsed.success) {
 export const env = {
   supabaseUrl: parsed.data.NEXT_PUBLIC_SUPABASE_URL,
   supabasePublishableKey: parsed.data.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+  sentryDsn: parsed.data.NEXT_PUBLIC_SENTRY_DSN,
 } as const;
 
 /** Whether every Supabase variable is set. Without them, Supabase is skipped. */

@@ -1,17 +1,24 @@
 "use client";
 
+import * as Sentry from "@sentry/nextjs";
+import { useEffect } from "react";
 import "./globals.css";
 
 /**
  * Fallback for when the root layout itself fails. It replaces the root layout, so it renders its own
  * `<html>` / `<body>` and relies on none of the layout's providers or theme; the font comes with globals.css.
  * The error itself is never shown, only the `digest` to match against the server log.
+ * Server errors (with a `digest`) were already reported, so only browser errors go to Sentry.
  */
 export default function GlobalError({ error, retry }: { error: unknown; retry: () => void }) {
   const digest =
     error instanceof Error && "digest" in error && typeof error.digest === "string"
       ? error.digest
       : undefined;
+
+  useEffect(() => {
+    if (!digest) Sentry.captureException(error);
+  }, [error, digest]);
 
   return (
     <html lang="en">

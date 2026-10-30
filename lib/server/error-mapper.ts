@@ -1,4 +1,5 @@
 import "server-only";
+import * as Sentry from "@sentry/nextjs";
 import { unstable_rethrow } from "next/navigation";
 import type { z } from "zod";
 import {
@@ -14,21 +15,30 @@ import { Prisma } from "@/prisma/client";
  * an error becomes; `error-handlers.ts` sends it out in the shape each entry point needs.
  *
  * - Errors Next.js uses for control flow, such as `redirect()` and `notFound()`, are rethrown.
- * - A raw ZodError is not an expected failure: client input is validated through `./validation`, so a ZodError
- *   that gets here comes from the server's own data (a stored value, an outside response) and is a bug, handled
- *   like any unknown error rather than blamed on the client as a 400.
- * - Unknown errors go only to the server log; the client gets only a generic message.
+ * - Expected failures (ProblemError, including the validation failures `./validation` throws, and known Prisma
+ *   errors) are not reported. A raw ZodError is not one of them: client input is validated through
+ *   `./validation`, so a ZodError that gets here comes from the server's own data (a stored value, an outside
+ *   response) and is a bug, reported like any unexpected error rather than blamed on the client as a 400.
+ * - Unknown errors (`mapErrorToProblem`, for Route Handlers) go to the server log and Sentry; the client
+ *   gets only a generic message and an `errorId` that ties the two together. Route Handler errors never
+ *   reach Next's `onRequestError`, so they are reported here. Server Actions use only
+ *   `mapExpectedError` and rethrow unknown errors for `onRequestError`.
  */
 export function mapErrorToProblem(error: unknown, instance?: string): Problem {
+  const expected = mapExpectedError(error, instance);
+  if (expected) return expected;
+
+  const errorId = Sentry.captureException(error, instance ? { tags: { instance } } : undefined);
+  console.error(`[errorId=${errorId}]`, error);
+  return new ProblemError(500, "We could not process your request. Please try again later.", {
+    extensions: { errorId },
+  }).toProblem(instance);
+}
+
+/** Turns only expected failures into Problems and returns `undefined` for anything else. Reports nothing. */
+export function mapExpectedError(error: unknown, instance?: string): Problem | undefined {
   unstable_rethrow(error);
-
-  const problemError = mapToProblemError(error);
-  if (problemError) return problemError.toProblem(instance);
-
-  console.error(error);
-  return new ProblemError(500, "We could not process your request. Please try again later.").toProblem(
-    instance,
-  );
+  return mapToProblemError(error)?.toProblem(instance);
 }
 
 function mapToProblemError(error: unknown): ProblemError | undefined {
