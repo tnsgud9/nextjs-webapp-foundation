@@ -1,0 +1,49 @@
+# Development environment and running the service. The test database lives separately in docker-compose.test.yaml.
+#
+# - Development: `pnpm docker:db` starts only db, and the app runs on the host with `pnpm dev` (faster file watching
+#   and HMR). Point DATABASE_URL and DIRECT_URL in .env at this database (localhost:5432) and create the schema with
+#   `pnpm db:migrate`.
+# - Service: `pnpm docker:up` builds the production image (Dockerfile) and starts only app (app profile). app does not
+#   depend on db and uses DATABASE_URL from .env unchanged, so it must be reachable from inside the container (such as
+#   the Supabase pooler); localhost there is the container itself. The image does not apply migrations, so run
+#   `pnpm db:deploy` against the target database first.
+#
+# The app's environment comes from .env alone: the build gets it as the BuildKit secret build-env (NEXT_PUBLIC_* go
+# into the bundle), and the runtime through env_file, so adding a variable changes neither this file nor the
+# Dockerfile. Secrets never stay in the image. `pnpm docker:up` stops at once without .env; `pnpm docker:db` does not
+# need it. The database listens on this machine only (127.0.0.1), out of reach from the rest of the network.
+# Development data persists in the db-data volume; remove the volume to delete it.
+# The project name is the folder name, so projects in different folders get their own containers and volumes.
+services:
+  db:
+    image: postgres:17-alpine
+    ports:
+      - "127.0.0.1:5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: app
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "app"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+
+  app:
+    profiles: [app]
+    build:
+      context: .
+      secrets: [build-env]
+    env_file: .env
+    ports:
+      - "127.0.0.1:3000:3000"
+    restart: unless-stopped
+
+volumes:
+  db-data:
+
+secrets:
+  build-env:
+    file: .env

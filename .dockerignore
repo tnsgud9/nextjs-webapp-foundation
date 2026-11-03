@@ -1,0 +1,26 @@
+# Never in the image: secrets (.env), local build and install output, test results, and tool state.
+.env*
+.git
+node_modules
+.next
+app/generated
+coverage
+test-results
+playwright-report
+*.tsbuildinfo
+next-env.d.ts
+poc
+.omc
+.codex
+.claude
+.agents
+.github
+Dockerfile*
+docker-compose*.yaml
+# Tests and test tooling. The production build type-checks only app code (tsconfig.build.json), so the image build does not need them.
+test-utils
+**/*.vitest.test.ts
+**/*.playwright.test.ts
+vitest.config.mts
+playwright.config.ts
+app/playwright

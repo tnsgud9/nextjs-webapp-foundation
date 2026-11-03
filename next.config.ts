@@ -22,6 +22,10 @@ const securityHeaders = [
 const pageExtensions = ["tsx", "ts", "jsx", "js"];
 
 const nextConfig: NextConfig = {
+  // Only the Docker image (Dockerfile) uses standalone output, bundling just the files needed to run.
+  // Local and hosted builds stay as they are (Windows builds can hit symlink permission errors,
+  // and standalone does not work with `next start`).
+  output: process.env.NEXT_OUTPUT_STANDALONE === "1" ? "standalone" : undefined,
   pageExtensions:
     process.env.PLAYWRIGHT === "1" ? ["playwright.tsx", ...pageExtensions] : pageExtensions,
   poweredByHeader: false,
