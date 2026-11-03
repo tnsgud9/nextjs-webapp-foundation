@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel the previous run when a new commit arrives on the same branch.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Checks only, so read-only permissions. No secrets (database, Supabase, Sentry).
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Lint, types, Vitest, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Test database for the Vitest `db` project and Playwright. Same image and address as docker-compose.test.yaml, so the credentials are not secret.
+    services: &test-db
+      test-db:
+        image: postgres:17-alpine
+        ports: ["5433:5432"]
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: app_test
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+
+      - name: Prisma schema
+        run: |
+          pnpm exec prisma validate
+          pnpm exec prisma format
+          git diff --exit-code -- prisma
+
+      - run: pnpm audit --audit-level high
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test:vitest
+
+      # Regular production build: Playwright-only pages are left out and the showcase stays closed.
+      - run: pnpm build
+
+  playwright:
+    name: Playwright
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services: *test-db
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+
+      - run: pnpm exec playwright install --with-deps chromium
+
+      # playwright.config.ts builds and starts a PLAYWRIGHT=1 build.
+      - run: pnpm test:playwright
+
+      - name: Upload failure traces
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-test-results
+          path: test-results/
+          retention-days: 7
+
+  docker:
+    name: Docker image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      # Check that the production image builds, with Node from .nvmrc, and that it starts and answers its health
+      # check: the standalone server is what ships, and Playwright tests `next start` instead. Tagging, pushing, and
+      # deploying are per service.
+      - run: docker build --build-arg NODE_VERSION="$(cat .nvmrc)" -t app .
+      - name: Start the image and wait for its health check
+        run: |
+          docker run -d --name app -p 127.0.0.1:3000:3000 app
+          for _ in $(seq 1 30); do
+            if curl -fsS --max-time 2 http://127.0.0.1:3000/api/health; then exit 0; fi
+            sleep 1
+          done
+          docker logs app
+          exit 1

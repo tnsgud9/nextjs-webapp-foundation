@@ -4,13 +4,14 @@
 # (.dockerignore). Environment variables are never listed one by one: the build receives one env file as the
 # BuildKit secret build-env, and the runtime receives container environment variables, so adding a variable never
 # changes this file. Change the Node major version together with .nvmrc.
-ARG NODE_VERSION=24
+ARG NODE_VERSION=26
 
 FROM node:${NODE_VERSION}-alpine AS base
-ENV NEXT_TELEMETRY_DISABLED=1 \
-    COREPACK_ENABLE_DOWNLOAD_PROMPT=0
-RUN corepack enable
+ENV NEXT_TELEMETRY_DISABLED=1
 WORKDIR /app
+# Node.js 25+ no longer ships corepack, so install the pnpm version pinned in packageManager directly.
+COPY package.json ./
+RUN npm install -g "$(node -p "require('./package.json').packageManager")"
 
 # Install dependencies. postinstall generates the Prisma Client (app/generated/prisma), so copy the schema too.
 FROM base AS deps

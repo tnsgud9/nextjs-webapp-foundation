@@ -1,0 +1,16 @@
+name: Setup
+description: Set up pnpm (packageManager in package.json) and Node (.nvmrc), then install dependencies exactly as locked.
+
+runs:
+  using: composite
+  steps:
+    - uses: pnpm/action-setup@v6
+
+    - uses: actions/setup-node@v7
+      with:
+        node-version-file: .nvmrc
+        cache: pnpm
+
+    # CI never changes the lockfile (--frozen-lockfile is the default). postinstall generates the Prisma Client.
+    - run: pnpm install
+      shell: bash

@@ -1,0 +1,6 @@
+# Check out every text file with LF line endings, whatever core.autocrlf says, so tools that read files
+# (CI, Docker, act) see the same bytes on every machine.
+* text=auto eol=lf
+
+# Binary files, never converted.
+*.woff2 binary

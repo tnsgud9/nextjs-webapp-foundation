@@ -1,6 +1,16 @@
-onlyBuiltDependencies:
-  - "@prisma/engines"
-  - prisma
-ignoredBuiltDependencies:
-  - sharp
-  - unrs-resolver
+# Never install a version published less than 7 days (10080 minutes) ago.
+minimumReleaseAge: 10080
+
+# Packages whose install scripts may run (true) or are skipped (false). An unlisted package with a build script fails the install.
+allowBuilds:
+  "@prisma/engines": true
+  prisma: true
+  sharp: false
+  unrs-resolver: false
+
+# Security fixes allowed before they are 7 days old. Remove each entry once its version is 7 days old.
+minimumReleaseAgeExclude:
+  # Next.js 16.4.5 security release (2026-11-03); remove on or after 2026-11-10.
+  - next@16.4.5
+  # Its own @next/* packages, which next pins to the same version.
+  - "@next/*"
