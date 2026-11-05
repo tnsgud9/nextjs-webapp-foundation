@@ -9,6 +9,7 @@ import {
   type ProblemFieldError,
 } from "@/lib/problem";
 import { Prisma } from "@/prisma/client";
+import { logger } from "./logger";
 
 /**
  * Rules for turning errors caught on the server into Problems. Only this file decides which Problem
@@ -23,13 +24,28 @@ import { Prisma } from "@/prisma/client";
  *   gets only a generic message and an `errorId` that ties the two together. Route Handler errors never
  *   reach Next's `onRequestError`, so they are reported here. Server Actions use only
  *   `mapExpectedError` and rethrow unknown errors for `onRequestError`.
+ * - `request` adds the method and the proxy's request ID to the log line and the Sentry tags.
  */
-export function mapErrorToProblem(error: unknown, instance?: string): Problem {
+export function mapErrorToProblem(
+  error: unknown,
+  instance?: string,
+  request?: { method: string; requestId?: string },
+): Problem {
   const expected = mapExpectedError(error, instance);
   if (expected) return expected;
 
-  const errorId = Sentry.captureException(error, instance ? { tags: { instance } } : undefined);
-  console.error(`[errorId=${errorId}]`, error);
+  const tags = {
+    ...(instance && { instance }),
+    ...(request?.requestId && { "request.id": request.requestId }),
+  };
+  const errorId = Sentry.captureException(error, Object.keys(tags).length > 0 ? { tags } : undefined);
+  logger.error("Unhandled error in a Route Handler", {
+    exception: error,
+    "sentry.event_id": errorId,
+    "request.id": request?.requestId,
+    "http.request.method": request?.method,
+    "url.path": instance,
+  });
   return new ProblemError(500, "We could not process your request. Please try again later.", {
     extensions: { errorId },
   }).toProblem(instance);

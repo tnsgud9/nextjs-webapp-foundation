@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { contentSecurityPolicy } from "@/lib/csp";
+import { REQUEST_ID_HEADER } from "@/lib/server/logger";
 import { updateSession } from "@/lib/supabase/proxy";
 
 export async function proxy(request: NextRequest) {
@@ -8,6 +9,8 @@ export async function proxy(request: NextRequest) {
   const csp = contentSecurityPolicy(nonce, request.nextUrl.pathname);
   request.headers.set("x-nonce", nonce);
   request.headers.set("Content-Security-Policy", csp);
+  // A fresh ID per request for the server logs; it replaces any value the client sent and is not returned.
+  request.headers.set(REQUEST_ID_HEADER, crypto.randomUUID());
 
   const response = await updateSession(request);
   response.headers.set("Content-Security-Policy", csp);

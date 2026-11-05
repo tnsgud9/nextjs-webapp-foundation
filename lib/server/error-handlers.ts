@@ -2,6 +2,7 @@ import "server-only";
 import type { NextRequest } from "next/server";
 import type { ActionResult } from "@/lib/problem";
 import { mapErrorToProblem, mapExpectedError } from "./error-mapper";
+import { REQUEST_ID_HEADER } from "./logger";
 
 /**
  * Error handlers per server entry point. They only turn errors into Problems through `error-mapper`
@@ -24,7 +25,10 @@ export function withRouteErrorHandler<Context = unknown>(
     try {
       return await handler(request, context);
     } catch (error) {
-      const problem = mapErrorToProblem(error, request.nextUrl.pathname);
+      const problem = mapErrorToProblem(error, request.nextUrl.pathname, {
+        method: request.method,
+        requestId: request.headers.get(REQUEST_ID_HEADER) ?? undefined,
+      });
       return new Response(JSON.stringify(problem), {
         status: problem.status,
         headers: { "Content-Type": "application/problem+json" },

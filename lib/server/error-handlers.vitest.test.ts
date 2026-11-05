@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { NextRequest } from "next/server";
 import { describe, expect, it } from "vitest";
 import { ProblemError } from "@/lib/problem";
-import { SENTRY_EVENT_ID, sentryReports } from "@/test-utils/vitest/setup";
+import { loggedErrors, SENTRY_EVENT_ID, sentryReports } from "@/test-utils/vitest/setup";
 import { withActionErrorHandler, withRouteErrorHandler } from "./error-handlers";
 
 const request = () => new NextRequest("http://test/api/items/1?secret=q");
@@ -37,6 +37,15 @@ describe("withRouteErrorHandler", () => {
     const body = await (await withRouteErrorHandler(failWith(new Error("SECRET")))(request(), undefined)).text();
     expect(body).not.toContain("SECRET");
     expect(JSON.parse(body)).toMatchObject({ status: 500, errorId: SENTRY_EVENT_ID });
+  });
+
+  it("logs the method, the path without the query, and the proxy's request ID", async () => {
+    const withId = new NextRequest("http://test/api/items/1?secret=q", { headers: { "x-request-id": "req-1" } });
+    await withRouteErrorHandler(failWith(new Error("boom")))(withId, undefined);
+    expect(loggedErrors()).toEqual([
+      expect.objectContaining({ "request.id": "req-1", "http.request.method": "GET", "url.path": "/api/items/1" }),
+    ]);
+    expect(JSON.stringify(loggedErrors())).not.toContain("secret=q");
   });
 
   it("lets redirect() propagate to Next.js", async () => {

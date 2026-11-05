@@ -4,7 +4,7 @@ import { z } from "zod";
 import { PROBLEM_TYPES, ProblemError } from "@/lib/problem";
 import { Prisma } from "@/prisma/client";
 import { thrown } from "@/test-utils/vitest/helpers";
-import { SENTRY_EVENT_ID, sentryReports } from "@/test-utils/vitest/setup";
+import { loggedErrors, SENTRY_EVENT_ID, sentryReports } from "@/test-utils/vitest/setup";
 import { mapErrorToProblem, mapValidationError } from "./error-mapper";
 
 const prismaError = (code: string) =>
@@ -75,7 +75,27 @@ describe("unexpected errors", () => {
     });
     expect(JSON.stringify(problem)).not.toContain("SECRET");
     expect(sentryReports()).toEqual([{ error, context: { tags: { instance: "/api/x" } } }]);
-    expect(console.error).toHaveBeenCalledWith(`[errorId=${SENTRY_EVENT_ID}]`, error);
+  });
+
+  it("writes one structured log line tied to the Sentry event and the request", () => {
+    const error = new Error("SECRET internal detail");
+    mapErrorToProblem(error, "/api/x", { method: "POST", requestId: "req-1" });
+
+    expect(sentryReports()).toEqual([
+      { error, context: { tags: { instance: "/api/x", "request.id": "req-1" } } },
+    ]);
+    expect(loggedErrors()).toEqual([
+      expect.objectContaining({
+        severity_text: "ERROR",
+        body: "Unhandled error in a Route Handler",
+        "sentry.event_id": SENTRY_EVENT_ID,
+        "request.id": "req-1",
+        "http.request.method": "POST",
+        "url.path": "/api/x",
+        "exception.type": "Error",
+        "exception.message": "SECRET internal detail",
+      }),
+    ]);
   });
 
   it("treats unknown Prisma error codes and non-Error throws as unexpected", () => {

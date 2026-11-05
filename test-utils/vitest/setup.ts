@@ -6,7 +6,7 @@ import { beforeEach, vi } from "vitest";
  *
  * - Sentry never sends anything. `captureException` returns a fixed event ID; read the reports with `sentryReports()`.
  * - `cookies()` from `next/headers` returns the cookies set with `setRequestCookies()`.
- * - Server error logs (`console.error`) are silenced; tests can still check the calls.
+ * - Server error logs (`console.error`) are silenced; read the structured ones with `loggedErrors()`.
  */
 // vi.mock is hoisted to the top of the file, so values its factory uses are hoisted with vi.hoisted.
 const sentry = vi.hoisted(() => ({ eventId: "test-event-id" }));
@@ -24,6 +24,11 @@ vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn(() => sentry.eventId)
 /** Errors reported to Sentry in the current test, with their context. Expected failures leave this empty. */
 export function sentryReports(): { error: unknown; context: unknown }[] {
   return vi.mocked(Sentry.captureException).mock.calls.map(([error, context]) => ({ error, context }));
+}
+
+/** Error log records (`lib/server/logger.ts`) written in the current test, parsed from their JSON lines. */
+export function loggedErrors(): Record<string, unknown>[] {
+  return vi.mocked(console.error).mock.calls.map(([line]) => JSON.parse(String(line)) as Record<string, unknown>);
 }
 
 vi.mock("next/headers", () => ({

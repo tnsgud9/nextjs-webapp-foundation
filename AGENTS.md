@@ -50,7 +50,7 @@ lib/
 ├── ky.ts                # HTTP client
 ├── query-client.ts      # TanStack Query client
 ├── sentry/              # Sentry: options.ts (shared), server.ts, client.ts
-├── server/              # Server-only: error → Problem mapping, error handlers, input validation
+├── server/              # Server-only: error → Problem mapping, error handlers, input validation, structured logger
 ├── supabase/            # Supabase browser / server clients, session refresh
 └── utils.ts             # cn re-export (shadcn alias)
 prisma/
@@ -60,7 +60,7 @@ prisma/
 Dockerfile               # Production image (standalone output); .dockerignore keeps .env out
 docker-compose.yaml      # Development database for pnpm dev (docker:db) and the app container (docker:up)
 docker-compose.test.yaml # Test-only Postgres for local runs (pnpm test:db:up / test:db:down)
-instrumentation.ts       # Server start-up entry (loads lib/sentry/server), onRequestError
+instrumentation.ts       # Server start-up entry (loads lib/sentry/server), onRequestError (lib/server/request-errors)
 instrumentation-client.ts # Browser start-up entry (loads lib/sentry/client)
 prisma7.config.ts        # Prisma CLI config
 proxy.ts                 # Request proxy (Supabase session refresh)
@@ -133,7 +133,8 @@ Audit checklist for any change that adds or edits an endpoint:
 - Map errors to Problems only in `@/lib/server/error-mapper`. Expected failures become Problems and are not reported. In Route Handlers, unexpected errors become a 500 Problem, are reported to Sentry, and carry the event ID as `errorId`. Server Actions rethrow unexpected errors, so `onRequestError` reports them and `error.tsx` shows the digest. Do not call `Sentry.captureException` for errors that already flow through the error handlers.
 
 ### Observability
-- Sentry setup lives in `lib/sentry/`: `options.ts` (the only place for init options), `server.ts` (Node / Edge), `client.ts` (browser). The root `instrumentation.ts` / `instrumentation-client.ts` only load these, because Next.js looks for them at the root. Keep data collection minimal (no user info, cookies, headers, bodies, query parameters); enabling more needs a stated reason.
+- Sentry setup lives in `lib/sentry/`: `options.ts` (the only place for init options), `server.ts` (Node / Edge), `client.ts` (browser). The root `instrumentation.ts` / `instrumentation-client.ts` only load these (and re-export `onRequestError` from `lib/server/request-errors.ts`), because Next.js looks for them at the root. Keep data collection minimal (no user info, cookies, headers, bodies, query parameters); enabling more needs a stated reason.
+- Write server logs only through `logger` from `@/lib/server/logger`, never `console` directly. Each line is one JSON object with OpenTelemetry field names, read by whatever collector the deployment uses; never send logs from the app to a log store. Keep `body` a fixed message and put values in attributes. Never log request bodies, headers, cookies, tokens, query strings, or personal data; secret-looking keys are redacted, but that is a backstop. Unexpected errors are already logged by the error mapping and `onRequestError`; do not log them again.
 - `/api/health` stays a cheap liveness check: no database, no external calls, no internal state in the response.
 - Validate all external input (JSON body, search params, FormData, route params, action arguments) with zod through `@/lib/server/validation` before using it. An invalid route param means not found: `parseParams()` throws a 404 Problem in Route Handlers, and `parsePageParams()` calls `notFound()` in pages.
 - Failures are RFC 9457 Problems (`@/lib/problem`). Signal expected failures by throwing `ProblemError`: pass a status number for status-only failures, or a domain problem type.
