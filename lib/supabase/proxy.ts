@@ -2,6 +2,8 @@ import "server-only";
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { hasSupabaseEnvVars } from "@/config/env";
+import { REQUEST_ID_HEADER } from "@/lib/server/logger";
+import { createAuthDeadline } from "./auth-deadline";
 import { SUPABASE_COOKIE_OPTIONS, getSupabaseConfig } from "./config";
 
 /**
@@ -13,6 +15,8 @@ import { SUPABASE_COOKIE_OPTIONS, getSupabaseConfig } from "./config";
  *
  * - It never redirects based on sign-in state. Each page, Server Action, and Route Handler
  *   checks access itself, because a changed proxy matcher could silently skip a route.
+ * - Supabase Auth gets a time limit (`auth-deadline.ts`). Past it, the request goes on with the
+ *   cookies it brought, so a slow Auth server cannot hold every page.
  * - Without the Supabase environment variables it does nothing.
  */
 export async function updateSession(request: NextRequest): Promise<NextResponse> {
@@ -20,8 +24,10 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
   if (!hasSupabaseEnvVars) return response;
 
   const { url, publishableKey } = getSupabaseConfig();
+  const deadline = createAuthDeadline();
   // Created per request so it is never shared between concurrent requests.
   const supabase = createServerClient(url, publishableKey, {
+    global: { fetch: deadline.fetch },
     cookieOptions: SUPABASE_COOKIE_OPTIONS,
     cookies: {
       getAll() {
@@ -42,7 +48,10 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
 
   // Put no code between createServerClient and this call; it causes random sign-outs.
   // getClaims() verifies the JWT and refreshes the token when needed.
-  await supabase.auth.getClaims();
+  await deadline.run(supabase.auth.getClaims(), null, {
+    "code.function.name": "updateSession",
+    "request.id": request.headers.get(REQUEST_ID_HEADER) ?? undefined,
+  });
 
   // If you build a new response, copy these cookies onto it or the session is lost.
   return response;

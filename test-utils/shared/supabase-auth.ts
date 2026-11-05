@@ -7,6 +7,7 @@ import type { AddressInfo } from "node:net";
  *
  * - It serves a JWKS (public keys), so Supabase `getClaims()` really verifies token signatures.
  * - It answers the refresh-token grant, so refreshing an expired session (proxy) can be tested.
+ * - An `unresponsive` session's refresh never gets an answer, so time limits can be tested.
  * - The signing key comes from a fixed seed: server and tests share it across processes, and no key is stored in the repo.
  * - Playwright starts the server before the app through test-utils/playwright/supabase-auth-server.mjs.
  *
@@ -27,6 +28,8 @@ export interface SessionOptions {
   forged?: boolean;
   /** When false, the refresh token is rejected (revoked session). Refreshable by default. */
   refreshable?: boolean;
+  /** When true, the server never answers the refresh (a hanging Auth server). */
+  unresponsive?: boolean;
 }
 
 /** Fake server host. An IPv4 address instead of localhost, so server and client use the same address. */
@@ -35,6 +38,7 @@ const KID = "test-key";
 const SERVER_KEY = keyFromSeed("fake-supabase-auth");
 const FORGED_KEY = keyFromSeed("forged");
 const REVOKED = "revoked";
+const UNRESPONSIVE = "unresponsive";
 
 /** Environment with `NEXT_PUBLIC_SUPABASE_*` pointing at the fake server. */
 export function fakeSupabaseEnv(url: string): Record<string, string> {
@@ -43,7 +47,11 @@ export function fakeSupabaseEnv(url: string): Record<string, string> {
 
 /** A session cookie like the ones the fake server at `url` issues. */
 export function sessionCookie(url: string, claims: SessionClaims, options: SessionOptions = {}) {
-  const refreshToken = options.refreshable === false ? REVOKED : base64url(JSON.stringify(identity(claims)));
+  const refreshToken = options.unresponsive
+    ? UNRESPONSIVE
+    : options.refreshable === false
+      ? REVOKED
+      : base64url(JSON.stringify(identity(claims)));
   const session = issueSession(url, claims, refreshToken, options.forged ? FORGED_KEY : SERVER_KEY);
   // The default @supabase/ssr storage key (sb-<first host label>-auth-token) and base64 cookie format.
   const name = `sb-${new URL(url).hostname.split(".")[0]}-auth-token`;
@@ -65,6 +73,7 @@ export async function startFakeSupabaseAuth(port = 0): Promise<{ url: string; cl
       let body = "";
       request.on("data", (chunk) => (body += chunk));
       request.on("end", () => {
+        if (body.includes(UNRESPONSIVE)) return;
         const claims = parseRefreshToken(body);
         if (!claims) return reply(400, { error: "invalid_grant", error_description: "Invalid Refresh Token" });
         reply(200, issueSession(url, claims, JSON.parse(body).refresh_token, SERVER_KEY));
@@ -76,7 +85,13 @@ export async function startFakeSupabaseAuth(port = 0): Promise<{ url: string; cl
   // localhost may resolve to ::1 or 127.0.0.1 first depending on the environment (Linux containers), so pin IPv4.
   await new Promise<void>((resolve) => server.listen(port, LOOPBACK, resolve));
   url = `http://${LOOPBACK}:${(server.address() as AddressInfo).port}`;
-  return { url, close: () => new Promise<void>((resolve) => server.close(() => resolve())) };
+  const close = () =>
+    new Promise<void>((resolve) => {
+      server.close(() => resolve());
+      // Unanswered requests would otherwise keep the server open.
+      server.closeAllConnections();
+    });
+  return { url, close };
 }
 
 function issueSession(url: string, claims: SessionClaims, refreshToken: string, key: KeyObject) {

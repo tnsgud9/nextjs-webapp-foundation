@@ -1,7 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { importWithEnv } from "@/test-utils/vitest/helpers";
-import { setRequestCookies } from "@/test-utils/vitest/setup";
+import { loggedWarnings, setRequestCookies } from "@/test-utils/vitest/setup";
 import { SUPABASE_DISABLED_ENV, fakeSupabaseAuth } from "@/test-utils/vitest/supabase-auth";
+
+// A shorter Supabase Auth time limit, so the time-limit test does not wait three seconds.
+const AUTH_LIMIT_MS = 300;
+vi.mock("@/lib/supabase/auth-deadline", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/lib/supabase/auth-deadline")>();
+  return { ...original, createAuthDeadline: () => original.createAuthDeadline(AUTH_LIMIT_MS) };
+});
 
 const auth = fakeSupabaseAuth();
 const loadAuth = (env = auth.env) => importWithEnv(env, () => import("./auth"));
@@ -36,6 +43,18 @@ describe("getCurrentUser", () => {
   it("refreshes an expired token and verifies the new one", async () => {
     setRequestCookies([auth.sessionCookie({ ...USER, expiresIn: -3600 })]);
     await expect((await loadAuth()).getCurrentUser()).resolves.toMatchObject({ id: USER.sub });
+  });
+
+  it("returns null and logs a warning when Supabase Auth does not answer in time", async () => {
+    setRequestCookies([auth.sessionCookie({ ...USER, expiresIn: -3600 }, { unresponsive: true })]);
+    await expect((await loadAuth()).getCurrentUser()).resolves.toBeNull();
+    expect(loggedWarnings()).toEqual([
+      expect.objectContaining({
+        body: "Supabase Auth did not answer in time",
+        "code.function.name": "getCurrentUser",
+        "supabase.auth.timeout_ms": AUTH_LIMIT_MS,
+      }),
+    ]);
   });
 
   it("returns null when Supabase is not configured", async () => {

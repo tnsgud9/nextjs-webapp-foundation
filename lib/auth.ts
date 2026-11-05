@@ -1,8 +1,11 @@
 import "server-only";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
 import { hasSupabaseEnvVars } from "@/config/env";
 import { ProblemError } from "@/lib/problem";
+import { REQUEST_ID_HEADER } from "@/lib/server/logger";
+import { createAuthDeadline } from "@/lib/supabase/auth-deadline";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -12,6 +15,8 @@ import { createClient } from "@/lib/supabase/server";
  * - `getClaims()` verifies the access token signature. `getSession()` only reads the cookie and
  *   can return forged values, so it is never used for auth decisions.
  * - Verification runs once per request, however often it is called (`React.cache`).
+ * - Supabase Auth gets a time limit (`lib/supabase/auth-deadline.ts`). Past it, the requester
+ *   counts as not signed in, like any other failed verification.
  * - Authorization (may this user access this resource?) is not decided here; the DAL checks it per resource.
  */
 
@@ -27,11 +32,15 @@ export interface AuthUser {
 export const getCurrentUser = cache(async (): Promise<AuthUser | null> => {
   if (!hasSupabaseEnvVars) return null;
 
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.getClaims();
-  if (error || !data) return null;
+  const deadline = createAuthDeadline();
+  const supabase = await createClient({ fetch: deadline.fetch });
+  const result = await deadline.run(supabase.auth.getClaims(), null, {
+    "code.function.name": "getCurrentUser",
+    "request.id": (await headers()).get(REQUEST_ID_HEADER) ?? undefined,
+  });
+  if (!result || result.error || !result.data) return null;
 
-  const { claims } = data;
+  const { claims } = result.data;
   // Only a user's session counts. Project API keys are signed tokens too, but their role is anon or service_role.
   if (claims.role !== "authenticated") return null;
   return {

@@ -4,14 +4,18 @@ import { cookies } from "next/headers";
 import { SUPABASE_COOKIE_OPTIONS, getSupabaseConfig } from "./config";
 
 /**
- * Don't put this client in a global variable. Always create a new client within each
- * function when using it.
+ * Supabase client for Server Components, Server Actions, and Route Handlers.
+ * Create a new one in each function and never keep it in a global variable: one server
+ * instance serves many requests at once, and a shared client would mix their sessions.
+ *
+ * `fetch` replaces the one the client uses for every call; `lib/auth.ts` passes a time-limited one.
  */
-export async function createClient() {
+export async function createClient(options: { fetch?: typeof fetch } = {}) {
   const { url, publishableKey } = getSupabaseConfig();
   const cookieStore = await cookies();
 
   return createServerClient(url, publishableKey, {
+    ...(options.fetch && { global: { fetch: options.fetch } }),
     cookieOptions: SUPABASE_COOKIE_OPTIONS,
     cookies: {
       getAll() {
