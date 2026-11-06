@@ -96,3 +96,55 @@ describe("data/ (data access layer)", () => {
     expect(await violations("data/probe.ts", code)).toBeGreaterThan(0);
   });
 });
+
+describe("entry points", () => {
+  const HANDLERS = 'import { withActionErrorHandler, withRouteErrorHandler } from "@/lib/server/error-handlers";\n';
+  const ACTION = `"use server";\n${HANDLERS}export const save = withActionErrorHandler(async () => ({ ok: true as const }));\n`;
+  const ROUTE = `${HANDLERS}export const dynamic = "force-dynamic";\nexport const GET = withRouteErrorHandler(async () => Response.json({}));\n`;
+
+  it.each(["app/probe/actions.ts", "components/probe-actions.ts", "lib/probe-actions.ts", "data/probe-actions.ts"])(
+    "allow Server Actions wrapped in withActionErrorHandler in %s",
+    async (file) => {
+      expect(await violations(file, ACTION)).toBe(0);
+      expect(await violations(file, `${ACTION}export type Saved = { ok: true };\n`)).toBe(0);
+    },
+  );
+
+  it.each([
+    ["a plain async function", '"use server";\nexport async function save() {}\n'],
+    ["an unwrapped arrow function", '"use server";\nexport const save = async () => {};\n'],
+    ["a different wrapper", `"use server";\n${HANDLERS}export const save = withRouteErrorHandler(async () => Response.json({}));\n`],
+    ["a default export", `"use server";\n${HANDLERS}export default withActionErrorHandler(async () => ({ ok: true as const }));\n`],
+    ["an alias", '"use server";\nconst save = async () => {};\nexport { save };\n'],
+    ["a re-export", '"use server";\nexport { save } from "./other";\n'],
+    ["export all", '"use server";\nexport * from "./other";\n'],
+  ])("block %s in a \"use server\" file", async (_name, code) => {
+    expect(await violations("app/probe/actions.ts", code)).toBeGreaterThan(0);
+    expect(await violations("data/probe-actions.ts", code)).toBeGreaterThan(0);
+  });
+
+  it("leave files without \"use server\" alone", async () => {
+    expect(await violations("app/probe/helpers.ts", "export async function save() {}\n")).toBe(0);
+  });
+
+  it("allow Route Handlers wrapped in withRouteErrorHandler, and route config exports", async () => {
+    expect(await violations("app/api/probe/route.ts", ROUTE)).toBe(0);
+  });
+
+  it.each([
+    ["a plain function", "export async function GET() {\n  return Response.json({});\n}\n"],
+    ["an unwrapped arrow function", "export const POST = async () => Response.json({});\n"],
+    ["a different wrapper", `${HANDLERS}export const PUT = withActionErrorHandler(async () => ({ ok: true as const }));\n`],
+    ["an alias", "const handler = async () => Response.json({});\nexport { handler as DELETE };\n"],
+    ["a re-export", 'export { GET } from "./other";\n'],
+    ["export all", 'export * from "./other";\n'],
+    ["a default export", "export default async function handler() {\n  return Response.json({});\n}\n"],
+  ])("block %s as a Route Handler", async (_name, code) => {
+    expect(await violations("app/api/probe/route.ts", code)).toBeGreaterThan(0);
+  });
+
+  it("keep the server boundary in route files", async () => {
+    expect(await violations("app/api/probe/route.ts", DB)).toBeGreaterThan(0);
+    expect(await violations("app/api/probe/route.ts", DYNAMIC_DB)).toBeGreaterThan(0);
+  });
+});

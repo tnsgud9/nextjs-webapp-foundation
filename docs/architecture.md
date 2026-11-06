@@ -59,6 +59,11 @@ Solid arrows are allowed imports; dashed arrows fail the build.
 
 ESLint adds the import rules a guard cannot express: who may import the Prisma Client, Prisma values, and server secrets. Its rules match the end of the import path, also catch dynamic `import()` / `require()`, and are themselves tested in `eslint.config.vitest.test.ts`.
 
+ESLint also checks how Server Actions and Route Handlers are exported, so neither can skip the error handler and its Problem mapping and reporting ([Server endpoints](../AGENTS.md#server-endpoints) has the rule; see [Errors](errors.md#server-pieces) for the handlers):
+- An export the rule cannot see through, such as an alias or a re-export, is rejected rather than trusted.
+- In route files, named exports other than HTTP methods, such as route config, are not checked, while default and export-all exports are rejected.
+- Route files keep the same import rules as the rest of `app/`.
+
 ## Client-side data
 
 - Server Components read through the data access layer directly, so nothing is fetched twice.
@@ -86,7 +91,7 @@ ESLint adds the import rules a guard cannot express: who may import the Prisma C
 | `lib/problem.ts` | Error contract shared by server and client |
 | `lib/ky.ts`, `lib/query-client.ts`, `components/query-provider.tsx` | HTTP client and TanStack Query |
 | `config/env.ts`, `config/env.server.ts` | Public and server-only environment variables |
-| `eslint.config.mjs` | The import boundary rules |
+| `eslint.config.mjs` | The import boundary rules and the Server Action and Route Handler export rules |
 | `app/layout.tsx` | Root layout and providers |
 | `components/ui/`, `components/shared/`, `components.json` | shadcn source and derived components |
 | `hooks/use-mobile.ts`, `hooks/use-highlighted-code.ts`, `lib/highlighter.tsx` | shadcn source outside `components/ui/` |
@@ -98,5 +103,6 @@ ESLint adds the import rules a guard cannot express: who may import the Prisma C
 
 - [Server / client boundary](../AGENTS.md#server--client-boundary): guards, Prisma imports
 - [Security boundary](../AGENTS.md#security-boundary-client--server): data access layer, identity, lint boundary, return values, mass assignment, rate limiting, audit checklist
+- [Server endpoints](../AGENTS.md#server-endpoints): error handler on every exported Server Action and Route Handler
 - [Data fetching](../AGENTS.md#data-fetching): HTTP client, Server Component reads
 - [UI](../AGENTS.md#ui): shadcn source, derived components, styles, showcase

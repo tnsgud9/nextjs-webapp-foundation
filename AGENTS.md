@@ -135,7 +135,7 @@ The `endpoint-review` skill runs this checklist over a change or the whole app.
 - Pin `prisma`, `@prisma/client`, and `@prisma/adapter-pg` to the same exact version.
 
 ### Server endpoints
-- Wrap every exported Route Handler in `withRouteErrorHandler()` and every exported Server Action in `withActionErrorHandler()` (both from `@/lib/server/error-handlers`). Route Handlers return their own `Response` on success. Do not hand-roll `try`/`catch` error responses.
+- Wrap every exported Route Handler in `withRouteErrorHandler()` and every exported Server Action in `withActionErrorHandler()` (both from `@/lib/server/error-handlers`), as `export const NAME = with...(...)`; ESLint rejects any other export from a `"use server"` file except types, and any other HTTP method, default, or export-all export from a `route.ts`. Route Handlers return their own `Response` on success. Do not hand-roll `try`/`catch` error responses.
 - Map errors to Problems only in `@/lib/server/error-mapper`. Expected failures become Problems and are not reported. In Route Handlers, unexpected errors become a 500 Problem, are reported to Sentry, and carry the event ID as `errorId`. Server Actions rethrow unexpected errors, so `onRequestError` reports them and `error.tsx` shows the digest. Do not call `Sentry.captureException` for errors that already flow through the error handlers.
 
 ### Observability

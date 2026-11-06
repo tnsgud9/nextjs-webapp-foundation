@@ -59,6 +59,8 @@ Every `type` URI other than `about:blank` starts with `PROBLEM_TYPE_BASE` (`/pro
 | `parseJson()`, `parseSearchParams()`, `parseFormData()`, `parseInput()` | `lib/server/validation.ts` | Validate input and throw a 400 validation Problem |
 | `parseParams()`, `parsePageParams()` | `lib/server/validation.ts` | Validate route params; an invalid param means not found |
 
+ESLint checks the wrapping, so no Server Action or Route Handler skips the mapping ([Server endpoints](../AGENTS.md#server-endpoints); [Architecture](architecture.md#serverclient-boundary) for what lint checks).
+
 ## Client error handling
 
 - `lib/ky.ts` turns a failed response's Problem `detail` (or `title`) into the error message, and `getProblem()` returns the Problem itself for branching on `type` or showing `errors` on form fields.

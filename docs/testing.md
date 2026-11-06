@@ -79,7 +79,7 @@ flowchart TD
 | `lib/server/*.vitest.test.ts` | Error mapping, including a raw zod error as a reported 500, input validation, error handlers, `redirect()` passthrough |
 | `lib/auth.vitest.test.ts` | Requester identity for every kind of token, refreshing an expired one, and the Auth time limit |
 | `lib/supabase/*.vitest.test.ts` | The Auth time limit, the proxy's session refresh with and without an answer, and refreshed session cookies marked Secure only in production builds |
-| `eslint.config.vitest.test.ts` | The server boundary rules, including every known bypass |
+| `eslint.config.vitest.test.ts` | The server boundary rules and the Server Action and Route Handler export rules, including every known bypass |
 | `instrumentation.vitest.test.ts` | Server errors are logged and reach Sentry through `onRequestError` |
 | `lib/sentry/options.vitest.test.ts` | The options every runtime shares: off without a DSN and on with one, minimal data collection, and only sampled performance traces |
 | `lib/csp.vitest.test.ts` | The CSP's base directives, connections to the Supabase origin, its websocket, and the Sentry origin, `script-src 'self'` alone without a nonce, the nonce with `'strict-dynamic'` and no `'unsafe-inline'` in production, `'unsafe-eval'` only in development, and external images only on the showcase |

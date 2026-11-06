@@ -27,6 +27,37 @@ const RESTRICTED = {
   },
 };
 
+// Entry points: every exported Server Action and Route Handler goes through its error handler, so the
+// Problem mapping and error reporting cannot be skipped. An export the rule cannot see through (a
+// plain function, an alias, a re-export) is rejected rather than trusted.
+const ACTION_FILE = `Program:has(> ExpressionStatement[directive="use server"])`;
+const ACTION_MESSAGE =
+  'A "use server" file exports only actions, each as `export const name = withActionErrorHandler(...)` from @/lib/server/error-handlers.';
+const ACTION_EXPORTS = [
+  {
+    selector: `${ACTION_FILE} > ExportNamedDeclaration[exportKind!="type"]:not(:has(> VariableDeclaration))`,
+    message: ACTION_MESSAGE,
+  },
+  {
+    selector: `${ACTION_FILE} > ExportNamedDeclaration > VariableDeclaration > VariableDeclarator:not([init.type="CallExpression"][init.callee.name="withActionErrorHandler"])`,
+    message: ACTION_MESSAGE,
+  },
+  { selector: `${ACTION_FILE} > :matches(ExportDefaultDeclaration, ExportAllDeclaration)`, message: ACTION_MESSAGE },
+];
+
+const HTTP_METHOD = "/^(GET|HEAD|POST|PUT|PATCH|DELETE|OPTIONS)$/";
+const ROUTE_MESSAGE =
+  "Export each Route Handler as `export const METHOD = withRouteErrorHandler(...)` from @/lib/server/error-handlers.";
+const ROUTE_EXPORTS = [
+  { selector: `ExportNamedDeclaration > FunctionDeclaration[id.name=${HTTP_METHOD}]`, message: ROUTE_MESSAGE },
+  {
+    selector: `ExportNamedDeclaration > VariableDeclaration > VariableDeclarator[id.name=${HTTP_METHOD}]:not([init.type="CallExpression"][init.callee.name="withRouteErrorHandler"])`,
+    message: ROUTE_MESSAGE,
+  },
+  { selector: `ExportSpecifier[exported.name=${HTTP_METHOD}]`, message: ROUTE_MESSAGE },
+  { selector: ":matches(ExportDefaultDeclaration, ExportAllDeclaration)", message: ROUTE_MESSAGE },
+];
+
 /** Blocks static import / export-from together with dynamic import() / require(), with a string or template literal. */
 function restrictImports(...entries) {
   return {
@@ -48,6 +79,7 @@ function restrictImports(...entries) {
         { selector: `CallExpression[callee.name="require"][arguments.0.value=/${source}/]`, message },
         { selector: `CallExpression[callee.name="require"][arguments.0.quasis.0.value.cooked=/${source}/]`, message },
       ]),
+      ...ACTION_EXPORTS,
     ],
   };
 }
@@ -126,6 +158,18 @@ const eslintConfig = defineConfig([
           selector: `Identifier[name="db"]:not(.object):not(ImportSpecifier > Identifier)`,
           message: RESTRICTED.db.message,
         },
+        ...ACTION_EXPORTS,
+      ],
+    },
+  },
+  {
+    // Route Handlers live only in app/, so the default boundary is the one they extend.
+    name: "entry points: route handlers",
+    files: ["app/**/route.{ts,tsx,js,jsx,mjs,cjs,mts,cts}"],
+    rules: {
+      "no-restricted-syntax": [
+        ...restrictImports(RESTRICTED.db, RESTRICTED.prismaValues, RESTRICTED.serverEnv)["no-restricted-syntax"],
+        ...ROUTE_EXPORTS,
       ],
     },
   },
