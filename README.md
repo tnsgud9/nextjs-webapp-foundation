@@ -93,6 +93,7 @@ How each part works, with diagrams, lives in [docs/](docs/README.md). The rules 
 | [Logging](docs/logging.md) | Structured server logs, request IDs, what is never logged, log collection |
 | [Testing](docs/testing.md) | Test tools, the test database, the fake Auth server, shared helpers |
 | [Delivery](docs/delivery.md) | CI, supply chain, dependency updates, environment variables, the Docker image, Compose |
+| [Coding agents](docs/agents.md) | Instruction files, skills, subagents, hooks, machine checks, the docs and endpoint review flows |
 
 Business domain pages are listed under [Domains](docs/README.md#domains).
 
@@ -106,4 +107,7 @@ Business domain pages are listed under [Domains](docs/README.md#domains).
 ## AI agents
 
 - `AGENTS.md` / `CLAUDE.md` — instructions for coding agents (the Next.js block is managed by `next dev`)
-- `.agents/skills`, `.claude/skills` — skills for the Prisma CLI / Client API and Supabase Postgres best practices
+- `.agents/skills`, `.claude/skills` — skills for the Prisma CLI / Client API, Supabase Postgres best practices, writing and reviewing the docs, and reviewing the server entry points
+- `.claude/agents`, `.claude/hooks` — the `docs-writer`, `docs-reviewer`, and read-only `endpoint-reviewer` subagents, and the hooks that limit what they can edit and run
+
+How these fit together, and which flow to follow after a change, is in [Coding agents](docs/agents.md).

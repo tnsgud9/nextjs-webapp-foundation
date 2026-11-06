@@ -238,4 +238,21 @@ describe("agent skills", () => {
     );
     expect(differing).toEqual([]);
   });
+
+  it("preloaded by a subagent exist in .claude/skills", () => {
+    const preloaded = readdirSync(".claude/agents").flatMap((agent) => {
+      const frontmatter = /^---\n([\s\S]*?)\n---/.exec(read(join(".claude/agents", agent)))?.[1] ?? "";
+      const list = /^skills:\n((?: {2}- .+\n?)+)/m.exec(frontmatter)?.[1] ?? "";
+      return [...list.matchAll(/- (.+)/g)].map((match) => match[1]!.trim());
+    });
+    expect(preloaded.length).toBeGreaterThan(0);
+    expect(preloaded.filter((skill) => !existsSync(join(".claude/skills", skill, "SKILL.md")))).toEqual([]);
+  });
+
+  it("and the subagents are all listed in CLAUDE.md", () => {
+    const listed = new Set(codeSpans(read("CLAUDE.md")));
+    const skills = readdirSync(".claude/skills");
+    const agents = readdirSync(".claude/agents").map((agent) => agent.replace(/\.md$/, ""));
+    expect([...skills, ...agents].filter((name) => !listed.has(name))).toEqual([]);
+  });
 });

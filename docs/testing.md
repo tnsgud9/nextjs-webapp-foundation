@@ -88,7 +88,8 @@ flowchart TD
 | `config/env.vitest.test.ts` | Environment variable parsing, and when the showcase opens |
 | `data/db.vitest.test.ts` | The data access layer reaches the test database, never the one in `.env` |
 | `test-utils/shared/test-database.vitest.test.ts` | The localhost-only guard and the table reset |
-| `docs/docs.vitest.test.ts` | Docs, the AGENTS.md structure tree, environment variable lists, and the two skill folders stay in step (see [Writing these docs](README.md#keeping-docs-current)) |
+| `docs/docs.vitest.test.ts` | Docs, the AGENTS.md structure tree, environment variable lists, the two skill folders, and the CLAUDE.md list of skills and subagents stay in step (see [Writing these docs](README.md#keeping-docs-current)) |
+| `.claude/hooks/*.vitest.test.ts` | The subagent hooks block the docs writer's edits outside the docs Markdown, and every Bash command but the read-only ones the subagents share, including git options that write a file when quoted, abbreviated, or brace-expanded |
 | `app/(design-system)/components/showcase.vitest.test.ts` | Every component in `components/ui/` and `components/shared/` is in the showcase, and every card is registered |
 | `app/global-error.vitest.test.ts` | The root-layout error page shows the digest, never the error |
 | `app/app.playwright.test.ts` | In a real browser, against a production build: security headers and nonce, status codes, sign-in handling, session refresh, error pages, Sentry reports, pages downloading only the Pretendard weights they use, characters Pretendard lacks falling back to Noto Sans served from this origin, and a toast shown through the app-wide Toaster |

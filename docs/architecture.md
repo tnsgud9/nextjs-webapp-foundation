@@ -22,6 +22,8 @@ flowchart TD
 
 Server Components, Route Handlers, and Server Actions are the **entry points**. Each one validates its input, calls the data access layer, and returns only what the UI needs. Nothing above the data access layer queries the database. Only the data access layer decides who may see what, so a new entry point cannot skip authorization by accident.
 
+Lint and tests catch the boundary breaks a machine can see. Whether a data access function authorizes the right resource, or a response holds more than the UI needs, takes reading the code: the `endpoint-review` skill, run by the read-only `endpoint-reviewer` subagent, traces each entry point to the database and back against the audit checklist.
+
 | Layer | Location | Role |
 | --- | --- | --- |
 | Client Components | `components/`, `hooks/`, `lib/ky.ts` | Call Route Handlers through the HTTP client and Server Actions directly |

@@ -12,6 +12,7 @@ How the app works, with a diagram for each part. The rules live in [AGENTS.md](.
 | [Logging](logging.md) | Structured server logs, request IDs, what is never logged, log collection |
 | [Testing](testing.md) | Test tools, the test database, the fake Auth server, shared helpers |
 | [Delivery](delivery.md) | CI, supply chain, dependency updates, environment variables, the Docker image, Compose |
+| [Coding agents](agents.md) | Instruction files, skills, subagents, hooks, machine checks, the docs and endpoint review flows |
 
 ## Domains
 
@@ -47,6 +48,6 @@ Every page has these parts, in this order:
 - Name nodes by role, such as "Proxy" or "Data access layer". Never use a file name. Use a function name only when the diagram explains that function. The key files table and the text map roles to code.
 
 ### Keeping docs current
-- A change to a file or folder listed in a page's key files table re-checks that page, and updates it in the same change if it no longer matches. `pnpm docs:affected` lists those pages for the uncommitted changes, or for the changes since a commit given as its argument, and names the changed files that no page lists.
+- A change to a file or folder listed in a page's key files table re-checks that page, and updates it in the same change if it no longer matches. `pnpm docs:affected` lists those pages for the uncommitted changes, or for the changes since a commit given as its argument, and names the changed files that no page lists. The `docs-review` and `docs-write` skills build on it to review and update the pages.
 - Extend an existing page first. Add a page only for a new topic, or when a page would pass 150 lines. List a new page in the table above and in the table in the root `README.md`, with the same wording.
-- `docs/docs.vitest.test.ts` checks what a machine can: page length and shape, key files that exist, both index tables, links and anchors, Mermaid types, styling, and node counts. It also checks that the AGENTS.md structure tree matches the folders, that environment variables match across their schema, `.env.example`, and the README table, and that the two skill folders are identical. It does not read domain pages yet. Whether the text still matches the code is left to review.
+- `docs/docs.vitest.test.ts` checks what a machine can: page length and shape, key files that exist, both index tables, links and anchors, Mermaid types, styling, and node counts. It also checks that the AGENTS.md structure tree matches the folders, that environment variables match across their schema, `.env.example`, and the README table, that the two skill folders are identical, and that every skill and subagent exists and is listed in CLAUDE.md. It does not read domain pages yet. Whether the text still matches the code is left to review.

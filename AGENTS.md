@@ -57,6 +57,8 @@ docs/                    # How the app works, with diagrams (index: docs/README.
 prisma/
 ├── schema.prisma        # generator / datasource
 └── models/              # Models, one file per domain
+.agents/skills/          # Agent skills, identical to .claude/skills/
+.claude/                 # Claude Code: skills/, agents/ (docs-writer, docs-reviewer, endpoint-reviewer), hooks/
 .github/                 # CI workflow (workflows/ci.yml) and its shared setup action
 Dockerfile               # Production image (standalone output); .dockerignore keeps .env out
 docker-compose.yaml      # Development database for pnpm dev (docker:db) and the app container (docker:up)
@@ -112,6 +114,8 @@ Audit checklist for any change that adds or edits an endpoint:
 4. Does the response, action result, or Client Component prop contain more than the UI needs?
 5. Can repeated calls cause cost or abuse, and if so, is the endpoint rate-limited?
 
+The `endpoint-review` skill runs this checklist over a change or the whole app.
+
 ### Environment variables
 - Never read `process.env` directly. Add public variables to the zod schema in `config/env.ts` and server-only variables to `config/env.server.ts`, then use them from there. The only exceptions are build-time values outside app code: `CI` and `PLAYWRIGHT` in `next.config.ts` and the `SENTRY_*` build variables read by the Sentry plugin, `NEXT_OUTPUT_STANDALONE` in `next.config.ts` (set only by `Dockerfile`), the test-only `TEST_DATABASE_URL` read in `test-utils/shared/test-database.ts` (tests do not load `.env`, so it is not in `.env.example`), and `NODE_ENV`, which Next.js sets and inlines at build time.
 - Never expose secrets as `NEXT_PUBLIC_*`.
@@ -163,6 +167,7 @@ Audit checklist for any change that adds or edits an endpoint:
 
 ### Documentation
 - Before changing a file listed in a `docs/` page's key files table, read that page. `pnpm docs:affected` lists the pages for the current changes.
+- The `docs-review` and `docs-write` skills carry the procedures for reviewing and writing docs; use them for docs work.
 - Rules for a single business domain go in the `## Domain rules` section of its page in `docs/domains/`, not here; this file keeps the rules every domain shares.
 - After such a change, check the page and update it in the same change if it no longer matches.
 - Write and edit `docs/` by "Writing these docs" in `docs/README.md`.
