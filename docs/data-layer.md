@@ -50,11 +50,13 @@ The conventions are listed in [Database](../AGENTS.md#database); this table give
 | --- | --- |
 | Primary keys | UUID v7 cannot be guessed and sorts by creation time, which keeps indexes compact |
 | Rows inserted outside Prisma | Prisma Client generates the ID, and a `gen_random_uuid()` default would produce UUID v4 and break the ordering. Supabase Postgres has no `uuidv7()` yet; once it does, a migration can switch the default to `dbgenerated("uuidv7()")` |
-| Users | The `auth` schema belongs to Supabase and tests run on plain Postgres, so there is no foreign key; a deleted user's rows are cleaned up in app code |
+| Users | The `auth` schema belongs to Supabase and tests run on plain Postgres, so there is no foreign key; a deleted user's rows are cleaned up in app code. The fixed `userId` / `<role>UserId` names let the model check find these columns |
 | Names | snake_case follows Postgres conventions |
 | Time | Timestamps with time zone stay correct across time zones |
-| Money | `Decimal` is exact; `Float` is not |
-| Foreign keys | Neither Postgres nor Prisma indexes them automatically |
+| Fractional values | `Decimal` is exact; `Float` is approximate, so the `///` comment on a `Float` field records why that is enough there |
+| Foreign keys | Neither Postgres nor Prisma indexes them automatically; an index or unique key that starts with the column already serves lookups, so another one would only slow writes |
+
+`prisma/models.vitest.test.ts` checks these conventions on every file in `prisma/models/`; with no files there yet, that per-file check has nothing to run on. It also checks that `prisma/schema.prisma` holds only the `generator` and `datasource` blocks, that files in `prisma/models/` hold only `model` and `enum` blocks, and that the three Prisma packages share one exact version. Prisma itself validates the syntax; the test catches what Prisma accepts but the rules do not. It always runs the checks against example schemas too, to show they accept a valid model and reject each broken model rule.
 
 ## Supabase project settings
 
@@ -71,6 +73,7 @@ Prisma does not rely on those grants, so server code is unaffected. To expose a 
 | `data/` | Data access functions |
 | `lib/db.ts` | Prisma Client and connection pool |
 | `prisma/schema.prisma`, `prisma/models/` | Schema |
+| `prisma/models.vitest.test.ts` | The model convention check |
 | `prisma/migrations/` | Migrations, created by the first `pnpm db:migrate` |
 | `prisma7.config.ts` | Prisma CLI config |
 | `config/env.server.ts` | `DATABASE_URL` |

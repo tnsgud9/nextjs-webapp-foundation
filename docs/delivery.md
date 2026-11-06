@@ -36,7 +36,7 @@ Some packages must match each other, so they move in one update:
 
 | Packages | Why they match |
 | --- | --- |
-| `prisma`, `@prisma/client`, `@prisma/adapter-pg` | The CLI that generates the client and the runtime it runs on must be one release, pinned to one exact version |
+| `prisma`, `@prisma/client`, `@prisma/adapter-pg` | The CLI that generates the client and the runtime it runs on must be one release; `prisma/models.vitest.test.ts` checks the one exact version |
 | `react`, `react-dom`, `@types/react`, `@types/react-dom` | React and its renderer must share one version, and the types describe that version |
 | `pg`, `@types/pg` | `@prisma/adapter-pg` runs on the app's `pg`, and the types describe that version |
 | `@tanstack/react-query`, `@tanstack/react-query-devtools` | The devtools require the matching version of the query package |
