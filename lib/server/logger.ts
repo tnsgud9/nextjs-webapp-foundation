@@ -7,7 +7,7 @@ import { serverEnv } from "@/config/env.server";
  * so collectors need no per-field mapping. No dependencies, so it also runs in the Edge runtime.
  *
  * - `exception` takes the caught value and becomes `exception.type` / `.message` / `.stacktrace`.
- * - Attributes whose key looks secret or personal (token, cookie, password, email, …) are replaced
+ * - Attributes whose key looks secret or personal (token, cookie, password, webhook, email, …) are replaced
  *   with `[REDACTED]`. Still never pass request bodies, headers, or query strings.
  * - Logging never throws.
  */
@@ -18,7 +18,7 @@ type Level = "info" | "warn" | "error";
 /** Request header carrying the request ID the proxy sets. */
 export const REQUEST_ID_HEADER = "x-request-id";
 
-const REDACTED_KEY = /password|passwd|secret|token|authorization|cookie|session|api[-_.]?key|e-?mail/i;
+const REDACTED_KEY = /password|passwd|secret|token|authorization|cookie|session|api[-_.]?key|webhook|e-?mail/i;
 const MAX_STACKTRACE = 16_000;
 const MAX_CAUSES = 3;
 

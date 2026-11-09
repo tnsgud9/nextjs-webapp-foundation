@@ -64,7 +64,7 @@ ESLint checks the wrapping, so no Server Action or Route Handler skips the mappi
 ## Client error handling
 
 - `lib/ky.ts` turns a failed response's Problem `detail` (or `title`) into the error message, and `getProblem()` returns the Problem itself for branching on `type` or showing `errors` on form fields.
-- ky never retries (`retry: 0`), so TanStack Query alone owns the retry policy. Requests send cookies to this origin only.
+- `lib/ky.ts` defaults to `retry: 0` and retries only when a call asks, so a failed request reaches the caller at once; [Data fetching](../AGENTS.md#data-fetching) says who sets the retry policy. Requests send cookies to this origin only.
 - A form reads `ActionResult`: `ok: true` carries the data, and `ok: false` carries the Problem. A thrown error's message never reaches the client.
 
 ## What reaches Sentry and the server log
@@ -80,6 +80,7 @@ ESLint checks the wrapping, so no Server Action or Route Handler skips the mappi
 - Without `NEXT_PUBLIC_SENTRY_DSN`, Sentry is not initialized and nothing is sent; the server log still records every unexpected error.
 - Every unexpected error also becomes one structured log line; [Logging](logging.md) covers its fields, the request ID, and how a deployment collects it.
 - Data collection is minimal (`lib/sentry/options.ts`): no user info, cookies, headers, bodies, or query parameters. Performance traces are only sampled.
+- On the server (Node and Edge), outgoing requests to the notification webhook get no span or breadcrumb (`lib/sentry/server.ts`), because the SDK records a request's URL path and the webhook's secret is in its path.
 - With the `SENTRY_*` build variables, the build uploads source maps and then deletes them from the output, so they are never public.
 - `GET /api/health` answers `{"status":"ok"}` with `Cache-Control: no-store`, without touching the database or any other service. It is public, so it stays that cheap; dependency checks go behind a protected route.
 
@@ -100,3 +101,4 @@ ESLint checks the wrapping, so no Server Action or Route Handler skips the mappi
 
 - [Server endpoints](../AGENTS.md#server-endpoints): error handlers, error mapping
 - [Observability](../AGENTS.md#observability): Sentry, server logs, health check, validation, Problems, status rules, released problem types
+- [Data fetching](../AGENTS.md#data-fetching): the HTTP client, the retry policy

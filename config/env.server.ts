@@ -21,6 +21,11 @@ const serverEnvSchema = z.object({
   SERVICE_NAME: z.string().optional(),
   /** `deployment.environment.name` in every log line. Defaults to `NODE_ENV`. */
   APP_ENV: z.string().optional(),
+  /**
+   * Incoming webhook of the channel that receives server notifications (`lib/notify`). A secret:
+   * anyone holding it can post to the channel. Unset, notifications are skipped.
+   */
+  NOTIFY_SLACK_WEBHOOK_URL: z.url({ protocol: /^https$/ }).optional(),
 });
 
 const parsed = serverEnvSchema.safeParse({
@@ -28,6 +33,7 @@ const parsed = serverEnvSchema.safeParse({
   DATABASE_URL: process.env.DATABASE_URL || undefined,
   SERVICE_NAME: process.env.SERVICE_NAME || undefined,
   APP_ENV: process.env.APP_ENV || undefined,
+  NOTIFY_SLACK_WEBHOOK_URL: process.env.NOTIFY_SLACK_WEBHOOK_URL || undefined,
 });
 
 if (!parsed.success) {
@@ -40,4 +46,5 @@ export const serverEnv = {
   databaseUrl: parsed.data.DATABASE_URL,
   serviceName: parsed.data.SERVICE_NAME ?? packageName,
   environment: parsed.data.APP_ENV ?? process.env.NODE_ENV ?? "development",
+  notifySlackWebhookUrl: parsed.data.NOTIFY_SLACK_WEBHOOK_URL,
 } as const;

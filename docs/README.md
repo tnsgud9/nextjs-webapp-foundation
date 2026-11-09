@@ -10,6 +10,7 @@ How the app works, with a diagram for each part. The rules live in [AGENTS.md](.
 | [Data layer](data-layer.md) | The data access layer, database connections, schema, migrations, model conventions |
 | [Errors](errors.md) | Problems, error handlers, client error handling, Sentry, the health check |
 | [Logging](logging.md) | Structured server logs, request IDs, what is never logged, log collection |
+| [Notifications](notifications.md) | Server notifications to a chat service: kinds of notification, topics and destinations, providers, best-effort delivery |
 | [Testing](testing.md) | Test tools, the test database, the fake Auth server, shared helpers |
 | [Delivery](delivery.md) | CI, supply chain, dependency updates, environment variables, the Docker image, Compose |
 | [Coding agents](agents.md) | Instruction files, skills, subagents, hooks, machine checks, the docs and endpoint review flows |

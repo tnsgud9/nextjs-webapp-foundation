@@ -25,6 +25,7 @@ flowchart TD
 | Database | A real, disposable Postgres: `docker-compose.test.yaml` locally, the same image as a CI service container | Authorization and constraints in the data access layer are the only line of defense, and a mocked Prisma would pass them all |
 | Supabase Auth | A local fake server that serves the signing keys and answers refresh-token exchanges. Tokens are really signed, so `getClaims()` really verifies them | The tests cover how this code handles Supabase, not Supabase itself |
 | Sentry | Vitest mocks it; Playwright intercepts what the browser sends | Nothing is ever sent |
+| Chat service | Vitest mocks `@/lib/notify`; the tests of `lib/notify` itself import its modules directly and stub `fetch`. See [Notifications](notifications.md#notifications-in-tests) | Nothing is ever sent; tests check which kind of notification code asked to send, and with what data |
 
 The fake server's signing key comes from a fixed seed, so the server and the tests agree on it without a key stored in the repository.
 
@@ -63,7 +64,7 @@ flowchart TD
 | `shared/supabase-auth.ts` | Fake Auth server and session cookies: valid, anonymous, non-user role, forged, expired, revoked, unanswered |
 | `shared/test-database.ts` | Test database address, localhost-only guard, `resetDatabase()` |
 | `shared/database-setup.ts` | The database setup in the diagrams above |
-| `vitest/setup.ts` | Runs before every Vitest file: mocks Sentry (`sentryReports()`) and `next/headers` (`setRequestCookies()`), and silences error and warning logs (`loggedErrors()`, `loggedWarnings()`) |
+| `vitest/setup.ts` | Runs before every Vitest file: mocks Sentry (`sentryReports()`), `@/lib/notify` while still defining kinds for real (`sentNotifications()`, the kind name and data of each `notify()` call in the current test), and `next/headers` (`setRequestCookies()`), and silences error and warning logs (`loggedErrors()`, `loggedWarnings()`) |
 | `vitest/database.ts` | Points the db project at the test database and empties it before each test |
 | `vitest/helpers.ts` | `thrown()`, and `importWithEnv()` to reload a module with other variables |
 | `vitest/supabase-auth.ts` | `fakeSupabaseAuth()` starts the fake Auth server for one test file, for any test that needs a signed-in user |
@@ -79,13 +80,15 @@ flowchart TD
 | `lib/server/*.vitest.test.ts` | Error mapping, including a raw zod error as a reported 500, input validation, error handlers, `redirect()` passthrough |
 | `lib/auth.vitest.test.ts` | Requester identity for every kind of token, refreshing an expired one, and the Auth time limit |
 | `lib/supabase/*.vitest.test.ts` | The Auth time limit, the proxy's session refresh with and without an answer, and refreshed session cookies marked Secure only in production builds |
-| `eslint.config.vitest.test.ts` | The server boundary rules and the Server Action and Route Handler export rules, including every known bypass |
+| `eslint.config.vitest.test.ts` | The server boundary rules, the Server Action and Route Handler export rules, and the notify import rule: `import { notify }` allowed in Server Action files and Route Handlers and blocked elsewhere, also when relative or renamed; namespace, dynamic, `require()`, template literal, re-export, and `sendNotification()` forms blocked, and namespace, dynamic, re-export, and `sendNotification()` in entry points too; importing the notifier, a provider, or `kind.ts` (also relative or dynamic) blocked in app files and Route Handlers; kinds and types importable anywhere, types also from the module's own files, and `notify` through `@/lib/notify/index` |
 | `prisma/models.vitest.test.ts` | The model conventions on every model file, the pinned Prisma versions, and, with example schemas, the check itself |
 | `instrumentation.vitest.test.ts` | Server errors are logged and reach Sentry through `onRequestError` |
 | `lib/sentry/options.vitest.test.ts` | The options every runtime shares: off without a DSN and on with one, minimal data collection, and only sampled performance traces |
+| `lib/sentry/server.vitest.test.ts` | The server Sentry setup records no span or breadcrumb for the notification webhook, and ignores nothing without one |
 | `lib/csp.vitest.test.ts` | The CSP's base directives, connections to the Supabase origin, its websocket, and the Sentry origin, `script-src 'self'` alone without a nonce, the nonce with `'strict-dynamic'` and no `'unsafe-inline'` in production, `'unsafe-eval'` only in development, and external images only on the showcase |
 | `lib/query-client.vitest.test.ts` | No retry on a 4xx, one retry on a 5xx or network error, a new client per server request and one client in the browser, a one-minute stale time, and no refetch on window focus |
 | `lib/server/logger.vitest.test.ts` | Log line format, service and environment fields, redaction, exceptions, never throwing |
+| `lib/notify/**/*.vitest.test.ts` | Sending after the response, skipping without a destination, the https-only variable, render and send failures logged without the webhook URL, flat data and kebab-case names for kinds, the layout of the files in `notifications/`, the global mock, the chat message format, escaping, limits, and the single 429 retry |
 | `config/env.vitest.test.ts` | Environment variable parsing, and when the showcase opens |
 | `data/db.vitest.test.ts` | The data access layer reaches the test database, never the one in `.env` |
 | `test-utils/shared/test-database.vitest.test.ts` | The localhost-only guard and the table reset |

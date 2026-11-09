@@ -3,12 +3,13 @@ import { ESLint } from "eslint";
 import { beforeAll, describe, expect, it } from "vitest";
 
 /**
- * Regression tests for the server resource boundary in eslint.config.mjs (DAL, Prisma, server secrets).
+ * Regression tests for the server resource boundary in eslint.config.mjs (DAL, Prisma, server secrets), the
+ * entry point exports, and where notify() may be called.
  * Each snippet is linted as if it were a file at the given path to check whether it is blocked.
  */
 const root = import.meta.dirname;
 const eslint = new ESLint({ cwd: root });
-const BOUNDARY_RULES = new Set(["@typescript-eslint/no-restricted-imports", "no-restricted-syntax"]);
+const BOUNDARY_RULES = new Set(["@typescript-eslint/no-restricted-imports", "no-restricted-syntax", "notify/call-sites"]);
 
 // The first lint takes seconds to load the config and plugins and can exceed a single test's 5-second
 // timeout on a cold disk cache, so it is warmed up here with a longer timeout.
@@ -146,5 +147,93 @@ describe("entry points", () => {
   it("keep the server boundary in route files", async () => {
     expect(await violations("app/api/probe/route.ts", DB)).toBeGreaterThan(0);
     expect(await violations("app/api/probe/route.ts", DYNAMIC_DB)).toBeGreaterThan(0);
+  });
+});
+
+describe("notifications (call sites)", () => {
+  const NOTIFY = 'import { notify } from "@/lib/notify";\nexport const send = () => notify;\n';
+
+  it("allow notify() in a Route Handler", async () => {
+    expect(await violations("app/api/probe/route.ts", NOTIFY)).toBe(0);
+  });
+
+  it('allow notify() in a "use server" file', async () => {
+    const ACTION =
+      '"use server";\nimport { notify } from "@/lib/notify";\nimport { withActionErrorHandler } from "@/lib/server/error-handlers";\n' +
+      "export const save = withActionErrorHandler(async () => ({ ok: true as const, sent: typeof notify }));\n";
+    expect(await violations("app/probe/actions.ts", ACTION)).toBe(0);
+  });
+
+  it.each([
+    "components/probe.tsx",
+    "app/probe/page.tsx",
+    "app/probe/helpers.ts",
+    "data/probe.ts",
+    "lib/probe.ts",
+    "notifications/probe.ts",
+  ])("block notify() in %s", async (file) => {
+    expect(await violations(file, NOTIFY)).toBeGreaterThan(0);
+  });
+
+  it.each([
+    ["a relative import", 'import { notify } from "../lib/notify";\nexport const send = () => notify;\n'],
+    ["a renamed import", 'import { notify as send } from "@/lib/notify";\nexport const x = send;\n'],
+    ["a string-named import", 'import { "notify" as send } from "@/lib/notify";\nexport const x = send;\n'],
+    ["a string-named sendNotification()", 'import { "sendNotification" as send } from "@/lib/notify";\nexport const x = send;\n'],
+    ["a namespace import", 'import * as notifications from "@/lib/notify";\nexport const x = notifications;\n'],
+    ["a dynamic import", 'export const x = () => import("@/lib/notify");\n'],
+    ["a require", 'const { notify } = require("@/lib/notify");\nmodule.exports = notify;\n'],
+    ["a re-export", 'export { notify } from "@/lib/notify";\n'],
+    ["a template literal import", "export const x = () => import(`@/lib/notify`);\n"],
+    ["a template literal require", "const { notify } = require(`@/lib/notify`);\nmodule.exports = notify;\n"],
+    ["sendNotification()", 'import { sendNotification } from "@/lib/notify";\nexport const x = sendNotification;\n'],
+  ])("block %s outside entry points", async (_name, code) => {
+    expect(await violations("data/probe.ts", code)).toBeGreaterThan(0);
+  });
+
+  it.each([
+    ["lib/probe.ts", 'import { notify } from "./notify";\nexport const send = () => notify;\n'],
+    ["lib/server/probe.ts", 'import { notify } from "../notify/index";\nexport const send = () => notify;\n'],
+  ])("block a relative import that does not pass through lib/ (%s)", async (file, code) => {
+    expect(await violations(file, code)).toBeGreaterThan(0);
+  });
+
+  it.each([
+    ["sendNotification()", 'import { sendNotification } from "@/lib/notify";\nexport type X = typeof sendNotification;\n'],
+    ["a namespace import", 'import * as notifications from "@/lib/notify";\nexport type X = typeof notifications;\n'],
+    ["a dynamic import", "export type X = Awaited<ReturnType<typeof load>>;\nconst load = () => import(\"@/lib/notify\");\n"],
+    ["a re-export", 'export { notify } from "@/lib/notify";\n'],
+  ])("block %s in entry points too", async (_name, code) => {
+    expect(await violations("app/probe/actions.ts", `"use server";\n${code}`)).toBeGreaterThan(0);
+    expect(await violations("app/api/probe/route.ts", code)).toBeGreaterThan(0);
+  });
+
+  it.each([
+    ["the notifier", 'import { createNotifier } from "@/lib/notify/notifier";\nexport const x = createNotifier;\n'],
+    ["a provider", 'import { createSlackProvider } from "@/lib/notify/providers/slack";\nexport const x = createSlackProvider;\n'],
+    ["kind.ts", 'import { defineNotification } from "@/lib/notify/kind";\nexport const x = defineNotification;\n'],
+    ["a relative internal file", 'import { createNotifier } from "./notify/notifier";\nexport const x = createNotifier;\n'],
+    ["a dynamic import of an internal file", 'export const x = () => import("@/lib/notify/notifier");\n'],
+  ])("block importing %s of the module", async (_name, code) => {
+    expect(await violations("lib/probe.ts", code)).toBeGreaterThan(0);
+    expect(await violations("app/api/probe/route.ts", code)).toBeGreaterThan(0);
+  });
+
+  it("allow types from the module's own files, and the module itself through its index", async () => {
+    expect(await violations("data/probe.ts", 'import type { NotifyProvider } from "@/lib/notify/types";\nexport type X = NotifyProvider;\n')).toBe(0);
+    expect(await violations("data/probe.ts", 'import { type NotifyProvider } from "@/lib/notify/types";\nexport type X = NotifyProvider;\n')).toBe(0);
+    expect(await violations("app/api/probe/route.ts", 'import { notify } from "@/lib/notify/index";\nexport const x = notify;\n')).toBe(0);
+  });
+
+  it("allow defining kinds and importing types anywhere", async () => {
+    const KIND =
+      'import "server-only";\nimport { defineNotification } from "@/lib/notify";\n' +
+      'export const ProbeDone = defineNotification("probe-done", { topic: "ops", render: () => ({ title: "Done" }) });\n';
+    const TYPES = 'import type { NotificationData } from "@/lib/notify";\nexport type X = NotificationData<{ a: string }>;\n';
+    expect(await violations("notifications/probe-done.ts", KIND)).toBe(0);
+    expect(await violations("data/probe.ts", TYPES)).toBe(0);
+    expect(await violations("data/probe.ts", TYPES.replace("import type {", "import {"))).toBe(0);
+    expect(await violations("data/probe.ts", 'export type { NotificationData } from "@/lib/notify";\n')).toBe(0);
+    expect(await violations("data/probe.ts", 'export { type NotifyProvider } from "@/lib/notify/types";\n')).toBe(0);
   });
 });

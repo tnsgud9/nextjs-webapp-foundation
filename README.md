@@ -45,6 +45,7 @@ Copy `.env.example` to `.env`. The Prisma CLI loads only `.env` through `dotenv`
 | `DATABASE_URL` | App runtime (Prisma Client). Supavisor **transaction pooler (6543)**. Leave it and `DIRECT_URL` empty to run without a database. |
 | `DIRECT_URL` | Prisma CLI (migrate, etc.). **Session pooler (5432)**. The direct host is IPv6-only. |
 | `SERVICE_NAME`, `APP_ENV` | `service.name` and `deployment.environment.name` in every server log line. Default to `name` in `package.json`, and to `NODE_ENV`. |
+| `NOTIFY_SLACK_WEBHOOK_URL` | Incoming webhook (`https` only) of the chat channel that receives server notifications; every topic goes there for now. A secret: anyone holding it can post to the channel. Leave empty to skip notifications. |
 | `NEXT_PUBLIC_SENTRY_DSN` | Sentry error reporting from the browser and the server. Leave empty to disable Sentry; errors are then only logged on the server. |
 | `NEXT_PUBLIC_DESIGN_SYSTEM` | `1` opens the `/design-system` showcase in a production build (for example on a preview deployment). Left empty, it answers 404 everywhere except the development server. Read at build time. |
 | `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT` | Build only: source map upload to Sentry, read by the Sentry build plugin. Set them in the build environment; leave empty to skip the upload. |
@@ -91,6 +92,7 @@ How each part works, with diagrams, lives in [docs/](docs/README.md). The rules 
 | [Data layer](docs/data-layer.md) | The data access layer, database connections, schema, migrations, model conventions |
 | [Errors](docs/errors.md) | Problems, error handlers, client error handling, Sentry, the health check |
 | [Logging](docs/logging.md) | Structured server logs, request IDs, what is never logged, log collection |
+| [Notifications](docs/notifications.md) | Server notifications to a chat service: kinds of notification, topics and destinations, providers, best-effort delivery |
 | [Testing](docs/testing.md) | Test tools, the test database, the fake Auth server, shared helpers |
 | [Delivery](docs/delivery.md) | CI, supply chain, dependency updates, environment variables, the Docker image, Compose |
 | [Coding agents](docs/agents.md) | Instruction files, skills, subagents, hooks, machine checks, the docs and endpoint review flows |

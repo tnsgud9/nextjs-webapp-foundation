@@ -34,6 +34,7 @@ What a machine can check is a test or a lint rule, and the reviewers check only 
 | Prisma model test | `pnpm test:vitest:unit` | Where schema blocks go, primary and foreign keys, foreign key and duplicate indexes, snake_case names, timestamps, `Float`, user ID columns, pinned Prisma versions | Whether the model fits the domain |
 | ESLint boundary rules | `pnpm lint` | Imports of `db`, Prisma Client values, and server secrets, including dynamic imports, and how `data/` uses `db` | Whether each `data/` function authorizes the requester for this exact resource |
 | ESLint export rules | `pnpm lint` | Every exported Server Action and Route Handler goes through its error handler | Input validation, what reaches the browser, rate limiting |
+| ESLint notification rule | `pnpm lint` | App code reaches the notify module only through `import { notify }`, and only in Server Action files and Route Handlers. `defineNotification()`, types, and type-only re-exports import anywhere. Namespace, default, and dynamic imports, `require()`, re-exports from the module, `sendNotification()`, and anything but types from the module's own files are rejected in every file outside `lib/notify/`, `test-utils/`, and tests | Whether `notify()` runs only after the `data/` call has succeeded |
 
 `eslint.config.vitest.test.ts` and `.claude/hooks/*.vitest.test.ts` test the lint rules and the hooks themselves, including the known ways around them.
 
@@ -90,7 +91,7 @@ flowchart TD
   Open -->|no| Commit["Commit"]
 ```
 
-Lint covers the import boundary and the error handler wrapping, so the reviewer starts from code that already passes them. It traces each entry point from its input to the database and back, answers the audit checklist with `file:line` evidence, and checks that each `data/` function has its database test.
+Lint covers the import boundary, the error handler wrapping, and where `notify()` is imported, so the reviewer starts from code that already passes them. It traces each entry point from its input to the database and back, answers the audit checklist with `file:line` evidence, and checks that each `data/` function has its database test.
 
 ## Choosing a subagent
 
@@ -111,7 +112,7 @@ Lint covers the import boundary and the error handler wrapping, so the reviewer 
 | `docs/key-files.mts` | Key files parsing and `pnpm docs:affected` |
 | `docs/docs.vitest.test.ts` | Docs test |
 | `prisma/models.vitest.test.ts` | Prisma model test |
-| `eslint.config.mjs` | Boundary and export lint rules |
+| `eslint.config.mjs` | Boundary, export, and notification lint rules |
 
 ## Related rules
 

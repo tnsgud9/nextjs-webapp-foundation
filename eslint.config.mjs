@@ -1,4 +1,5 @@
 import { defineConfig, globalIgnores } from "eslint/config";
+import { builtinRules } from "eslint/use-at-your-own-risk";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
 
@@ -86,6 +87,48 @@ function restrictImports(...entries) {
 
 const ALL_SOURCES = ["**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}"];
 
+// Notifications are sent only from entry points, the places that call data/ and know whether it succeeded.
+// App code reaches the module in one way only: `import { notify }` (types and defineNotification aside), and
+// only in a "use server" file or a Route Handler. Namespace, default, and dynamic imports, require(),
+// re-exports, and sendNotification() (which sends at once, for code outside a request) are rejected in every
+// app file. The module is matched by the end of its path, aliased or relative, like the boundary above. The
+// selectors run as their own rule (no-restricted-syntax under another name), so the boundary blocks above
+// never override them.
+const NOTIFY_SOURCE = String.raw`\x2Fnotify(\x2Findex)?$`;
+const NOTIFY_IMPORT = `ImportDeclaration[importKind!="type"][source.value=/${NOTIFY_SOURCE}/]`;
+const NOTIFY_MESSAGE =
+  'Import { notify } from @/lib/notify only in a Server Action ("use server" file) or a Route Handler, and call it once the data/ call has succeeded.';
+/** Rejected in every app file, entry points included. */
+const NOTIFY_OTHER_ACCESS = [
+  `${NOTIFY_IMPORT} > :matches(ImportNamespaceSpecifier, ImportDefaultSpecifier)`,
+  `${NOTIFY_IMPORT} > ImportSpecifier[importKind!="type"]:matches([imported.name="sendNotification"], [imported.value="sendNotification"])`,
+  `ImportExpression[source.value=/${NOTIFY_SOURCE}/]`,
+  `ImportExpression[source.quasis.0.value.cooked=/${NOTIFY_SOURCE}/]`,
+  `CallExpression[callee.name="require"][arguments.0.value=/${NOTIFY_SOURCE}/]`,
+  `CallExpression[callee.name="require"][arguments.0.quasis.0.value.cooked=/${NOTIFY_SOURCE}/]`,
+  `ExportNamedDeclaration[exportKind!="type"][source.value=/${NOTIFY_SOURCE}/]:has(> ExportSpecifier[exportKind!="type"])`,
+  `ExportAllDeclaration[exportKind!="type"][source.value=/${NOTIFY_SOURCE}/]`,
+].map((selector) => ({ selector, message: NOTIFY_MESSAGE }));
+// The module's own files (notifier, providers, kind) would let code build a sender of its own.
+const NOTIFY_INTERNALS = String.raw`\x2Fnotify\x2F(?!index$)`;
+const INTERNALS_MESSAGE = "Import from @/lib/notify, never from its own files.";
+NOTIFY_OTHER_ACCESS.push(
+  ...[
+    `ImportDeclaration[importKind!="type"][source.value=/${NOTIFY_INTERNALS}/] > :matches(ImportSpecifier[importKind!="type"], ImportDefaultSpecifier, ImportNamespaceSpecifier)`,
+    `ImportExpression[source.value=/${NOTIFY_INTERNALS}/]`,
+    `ImportExpression[source.quasis.0.value.cooked=/${NOTIFY_INTERNALS}/]`,
+    `CallExpression[callee.name="require"][arguments.0.value=/${NOTIFY_INTERNALS}/]`,
+    `CallExpression[callee.name="require"][arguments.0.quasis.0.value.cooked=/${NOTIFY_INTERNALS}/]`,
+    `ExportNamedDeclaration[exportKind!="type"][source.value=/${NOTIFY_INTERNALS}/]:has(> ExportSpecifier[exportKind!="type"])`,
+    `ExportAllDeclaration[exportKind!="type"][source.value=/${NOTIFY_INTERNALS}/]`,
+  ].map((selector) => ({ selector, message: INTERNALS_MESSAGE })),
+);
+/** `import { notify }` outside a "use server" file. */
+const NOTIFY_OUTSIDE_ACTIONS = {
+  selector: `Program:not(:has(> ExpressionStatement[directive="use server"])) ${NOTIFY_IMPORT} > ImportSpecifier[importKind!="type"]:matches([imported.name="notify"], [imported.value="notify"])`,
+  message: NOTIFY_MESSAGE,
+};
+
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
@@ -172,6 +215,24 @@ const eslintConfig = defineConfig([
         ...ROUTE_EXPORTS,
       ],
     },
+  },
+  {
+    name: "notifications: call sites",
+    files: ALL_SOURCES,
+    plugins: { notify: { rules: { "call-sites": builtinRules.get("no-restricted-syntax") } } },
+    rules: { "notify/call-sites": ["error", ...NOTIFY_OTHER_ACCESS, NOTIFY_OUTSIDE_ACTIONS] },
+  },
+  {
+    // Route Handlers may import { notify }, and nothing else from the module.
+    name: "notifications: route handlers",
+    files: ["app/**/route.{ts,tsx,js,jsx,mjs,cjs,mts,cts}"],
+    rules: { "notify/call-sites": ["error", ...NOTIFY_OTHER_ACCESS] },
+  },
+  {
+    // The module itself and tests (which read the global mock) use it freely.
+    name: "notifications: module and tests",
+    files: ["lib/notify/**", "test-utils/**", "**/*.vitest.test.*", "**/*.playwright.test.*"],
+    rules: { "notify/call-sites": "off" },
   },
 ]);
 

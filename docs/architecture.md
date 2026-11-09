@@ -57,12 +57,12 @@ Solid arrows are allowed imports; dashed arrows fail the build.
 | Shared code | none, and it imports no guarded module | `lib/problem.ts`, `lib/csp.ts`, `config/env.ts` |
 | Client-only code | `import "client-only"` | `lib/sentry/client.ts`, modules that need browser-only APIs |
 
-ESLint adds the import rules a guard cannot express: who may import the Prisma Client, Prisma values, and server secrets. Its rules match the end of the import path, also catch dynamic `import()` / `require()`, and are themselves tested in `eslint.config.vitest.test.ts`.
+ESLint adds the import rules a guard cannot express: who may import the Prisma Client, Prisma values, and server secrets. Its rules match the end of the import path, also catch dynamic `import()` / `require()`, and are themselves tested in `eslint.config.vitest.test.ts`. A separate rule limits where the notify module is imported, so only entry points send notifications (see [Notifications](notifications.md#from-the-caller-to-the-chat-service)).
 
 ESLint also checks how Server Actions and Route Handlers are exported, so neither can skip the error handler and its Problem mapping and reporting ([Server endpoints](../AGENTS.md#server-endpoints) has the rule; see [Errors](errors.md#server-pieces) for the handlers):
 - An export the rule cannot see through, such as an alias or a re-export, is rejected rather than trusted.
 - In route files, named exports other than HTTP methods, such as route config, are not checked, while default and export-all exports are rejected.
-- Route files keep the same import rules as the rest of `app/`.
+- Route files keep the same server boundary rules as the rest of `app/`.
 
 ## Client-side data
 
@@ -91,7 +91,7 @@ ESLint also checks how Server Actions and Route Handlers are exported, so neithe
 | `lib/problem.ts` | Error contract shared by server and client |
 | `lib/ky.ts`, `lib/query-client.ts`, `components/query-provider.tsx` | HTTP client and TanStack Query |
 | `config/env.ts`, `config/env.server.ts` | Public and server-only environment variables |
-| `eslint.config.mjs` | The import boundary rules and the Server Action and Route Handler export rules |
+| `eslint.config.mjs` | The import boundary rules, the notification call-site rule, and the Server Action and Route Handler export rules |
 | `app/layout.tsx` | Root layout and providers |
 | `components/ui/`, `components/shared/`, `components.json` | shadcn source and derived components |
 | `hooks/use-mobile.ts`, `hooks/use-highlighted-code.ts`, `lib/highlighter.tsx` | shadcn source outside `components/ui/` |

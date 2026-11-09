@@ -37,6 +37,7 @@ config/
 ├── env.ts               # Public environment variables (NEXT_PUBLIC_*)
 └── env.server.ts        # Server-only environment variables
 data/                    # Data access layer (server-only): the only code that queries the database
+notifications/           # Kinds of notification, one file each (server-only), sent with notify() from lib/notify
 hooks/                   # Client hooks
 ├── use-mobile.ts        # From shadcn (sidebar), do not edit
 └── use-highlighted-code.ts # From shadcn (code-block), do not edit
@@ -49,6 +50,7 @@ lib/
 ├── problem.ts           # Shared RFC 9457 error contract: Problem, ProblemError, ActionResult
 ├── ky.ts                # HTTP client
 ├── query-client.ts      # TanStack Query client
+├── notify/              # Server notifications to a chat service: notify(), defineNotification(), providers/ (server-only)
 ├── sentry/              # Sentry: options.ts (shared), server.ts, client.ts
 ├── server/              # Server-only: error → Problem mapping, error handlers, input validation, structured logger
 ├── supabase/            # Supabase browser / server clients, session refresh
@@ -79,7 +81,7 @@ proxy.ts                 # Request proxy (Supabase session refresh)
 - Never hard-code the project name or tool versions in CI or Docker files. Read Node from `.nvmrc` and pnpm from `packageManager`. The one exception is the Postgres image, whose tag appears in `ci.yml`, `docker-compose.yaml`, and `docker-compose.test.yaml`; change the three together.
 - Docker: keep development and service containers in `docker-compose.yaml` and test-only services in `docker-compose.test.yaml`. Never copy `.env` into an image, add per-variable `ARG` / `ENV` lines, or pass secrets as build arguments: the build receives one env file through the BuildKit secret `build-env`, and the runtime receives container environment variables. The image never runs migrations. The app container reads the same `DATABASE_URL` as everything else; never add a second, container-only database variable.
 - Test files are named after the tool that runs them and sit next to the code they cover: `*.vitest.test.ts` (`pnpm test:vitest`) and `*.playwright.test.ts` (`pnpm test:playwright`). `pnpm test` runs all. A new tool gets its own suffix, script, and `test-utils/<tool>/`.
-- Put shared test setup and helpers in `test-utils/<tool>/` instead of repeating them in test files; code both tools need goes in `test-utils/shared/`, which imports no test tool. Vitest already mocks Sentry (`sentryReports()`) and `next/headers` globally (`test-utils/vitest/setup.ts`); use `fakeSupabaseAuth()` when a test needs a signed-in user.
+- Put shared test setup and helpers in `test-utils/<tool>/` instead of repeating them in test files; code both tools need goes in `test-utils/shared/`, which imports no test tool. Vitest already mocks Sentry (`sentryReports()`), `@/lib/notify` (`sentNotifications()`), and `next/headers` globally (`test-utils/vitest/setup.ts`); use `fakeSupabaseAuth()` when a test needs a signed-in user.
 - Tests never reach a real external service and need no secrets. The database is a real local Postgres (`docker-compose.test.yaml`, started with `pnpm test:db:up`; CI starts the same image). Keep test services in `docker-compose.test.yaml`, separate from any development compose file; Supabase Auth is the fake server in `test-utils/shared/supabase-auth.ts`; Sentry is mocked or intercepted. Never point tests at the Supabase project or the database in `.env`.
 - Vitest projects: `unit` (no external dependencies, parallel) and `db` (`data/**` and `test-utils/**` tests, real database, emptied before each test, one file at a time). Test `data/` functions against the database, including authorization for another user's resource; tests above `data/` mock the `data/` functions they call. Each test creates its own data. `pnpm test:vitest` and `pnpm test:playwright` fail when the database is down; `pnpm test:vitest:unit` skips it.
 - When you change error mapping, input validation, the error handlers, `lib/auth.ts`, or the ESLint boundary, update the matching Vitest test in the same change. Run Playwright when you change error pages, security headers, page sign-in handling, or Sentry setup.
@@ -104,7 +106,7 @@ Every Server Action and Route Handler is a public endpoint that anyone can call 
 - **Server Actions**: a `"use server"` file exports only actions. Each action validates its arguments, then calls `data/`; it never queries the database itself. Do not capture secrets in actions defined inside components.
 - **Pages**: Server Components read through `data/` as well. A page that requires sign-in calls `requirePageUser()` (redirects to `SIGN_IN_PATH`), never `requireUser()`. Turn a missing or forbidden resource into `notFound()` so its existence is not revealed. The proxy only refreshes sessions and protects nothing.
 - **Error pages**: `app/error.tsx` and `app/global-error.tsx` never render the error message, only the digest. Do not add a root `loading.tsx`: it streams every page, and `redirect()` / `notFound()` then answer 200 instead of 307 / 404. Add `loading.tsx` per route segment instead.
-- **Rate limiting**: there is none yet; Supabase Auth limits its own endpoints. Before releasing an endpoint that repeated calls can abuse (sends email or SMS, calls a paid API, creates data, accepts anonymous callers), limit it in the Server Action or Route Handler before calling `data/`. Key the limit by the requester's user ID, or the client IP for anonymous callers, keep the counters in a store every server instance shares (never process memory), and answer an exceeded limit with a 429 `ProblemError`.
+- **Rate limiting**: there is none yet; Supabase Auth limits its own endpoints. Before releasing an endpoint that repeated calls can abuse (sends email or SMS, posts a notification, calls a paid API, creates data, accepts anonymous callers), limit it in the Server Action or Route Handler before calling `data/`. Key the limit by the requester's user ID, or the client IP for anonymous callers, keep the counters in a store every server instance shares (never process memory), and answer an exceeded limit with a 429 `ProblemError`.
 - **Security headers**: keep the headers in `next.config.ts` on every route. Relax a single directive for the route that needs it instead of removing a header. The CSP is built in `lib/csp.ts`; pages get a per-request nonce from the proxy, so they always render dynamically. Content loads only from this origin, and connections go only to this origin, Supabase, and Sentry; add a new external origin to the one directive that needs it. Never add `'unsafe-inline'` to `script-src`; give a new inline or third-party script the nonce from the `x-nonce` request header.
 
 Audit checklist for any change that adds or edits an endpoint:
@@ -140,7 +142,7 @@ The `endpoint-review` skill runs this checklist over a change or the whole app.
 - Map errors to Problems only in `@/lib/server/error-mapper`. Expected failures become Problems and are not reported. In Route Handlers, unexpected errors become a 500 Problem, are reported to Sentry, and carry the event ID as `errorId`. Server Actions rethrow unexpected errors, so `onRequestError` reports them and `error.tsx` shows the digest. Do not call `Sentry.captureException` for errors that already flow through the error handlers.
 
 ### Observability
-- Sentry setup lives in `lib/sentry/`: `options.ts` (the only place for init options), `server.ts` (Node / Edge), `client.ts` (browser). The root `instrumentation.ts` / `instrumentation-client.ts` only load these (and re-export `onRequestError` from `lib/server/request-errors.ts`), because Next.js looks for them at the root. Keep data collection minimal (no user info, cookies, headers, bodies, query parameters); enabling more needs a stated reason.
+- Sentry setup lives in `lib/sentry/`: `options.ts` (the init options every runtime shares), `server.ts` (Node / Edge, plus the server-only filters), `client.ts` (browser). The root `instrumentation.ts` / `instrumentation-client.ts` only load these (and re-export `onRequestError` from `lib/server/request-errors.ts`), because Next.js looks for them at the root. Keep data collection minimal (no user info, cookies, headers, bodies, query parameters); enabling more needs a stated reason.
 - Write server logs only through `logger` from `@/lib/server/logger`, never `console` directly. Each line is one JSON object with OpenTelemetry field names, read by whatever collector the deployment uses; never send logs from the app to a log store. Keep `body` a fixed message and put values in attributes. Never log request bodies, headers, cookies, tokens, query strings, or personal data; secret-looking keys are redacted, but that is a backstop. Unexpected errors are already logged by the error mapping and `onRequestError`; do not log them again.
 - `/api/health` stays a cheap liveness check: no database, no external calls, no internal state in the response.
 - Validate all external input (JSON body, search params, FormData, route params, action arguments) with zod through `@/lib/server/validation` before using it. An invalid route param means not found: `parseParams()` throws a 404 Problem in Route Handlers, and `parsePageParams()` calls `notFound()` in pages.
@@ -152,8 +154,15 @@ The `endpoint-review` skill runs this checklist over a change or the whole app.
 - The error handlers do not authenticate. Authentication and authorization happen in the `data/` functions each handler and action calls.
 - On the client, read failures with `getProblem()` from `@/lib/ky` (Route Handlers) or `ActionResult.problem` (Server Actions).
 
+### Notifications
+- Send chat notifications only through `notify()` from `@/lib/notify`, with a kind of notification and its data; never name a service or channel. Call it from a Server Action or Route Handler once the `data/` call has succeeded; ESLint rejects importing `notify` anywhere else. Delivery is best effort, so never use it for anything that must not be lost.
+- Define each kind in its own file, `notifications/<name>.ts`, as `export const <Name> = defineNotification("<name>", ...)`. Its data is a flat DTO with only the fields the message needs (`NotificationData`), never a Prisma record. `lib/notify/notification-files.vitest.test.ts` checks the files.
+- A notification leaves the app: never put personal data, tokens, request bodies, or internal error details in it; link to the resource instead.
+- Do not notify unexpected errors; Sentry reports them.
+- Add a chat service as a provider in `lib/notify/providers/` and a destination as a server variable in `config/env.server.ts`. Never post to a webhook from anywhere else.
+
 ### Data fetching
-- Make HTTP calls through `lib/ky.ts`. TanStack Query (`lib/query-client.ts`) owns the retry policy.
+- Make HTTP calls through `lib/ky.ts`, which never retries by default. In client code, TanStack Query (`lib/query-client.ts`) owns the retry policy; server code that calls an outside service sets its own retry on that call, and retries a POST only where a repeat is harmless (such as a 429).
 - Data the server can read directly is read in Server Components through `data/` functions, not fetched again from the client.
 
 ### UI

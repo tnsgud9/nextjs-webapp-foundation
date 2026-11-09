@@ -21,7 +21,7 @@ flowchart TD
 ```
 
 - Only unexpected errors are logged, each exactly once. Expected failures are Problems the client already receives, so logging them would only add noise.
-- One warning comes from outside this flow: a Supabase Auth call that runs past its time limit (see [Auth](auth.md#time-limit)), with `code.function.name` and `supabase.auth.timeout_ms`.
+- Some lines come from outside this flow: a warning when a Supabase Auth call runs past its time limit (see [Auth](auth.md#time-limit)), with `code.function.name` and `supabase.auth.timeout_ms`, and the error and warning lines of a notification that failed or was skipped (see [Notifications](notifications.md#notification-log-lines)).
 - Route Handler errors never reach the request error hook, because the error handler catches them first; that is why two paths write the same kind of line.
 - The app never sends lines to a log store itself, so a slow or missing store cannot slow a request, and changing stores needs no code change.
 
@@ -57,7 +57,7 @@ The request ID ties together every line of one request. The proxy replaces any `
 ## What never reaches the log
 
 - Request bodies, headers, cookies, tokens, query strings, and personal data are never passed to the logger.
-- As a backstop, attributes whose key looks secret or personal (token, cookie, session, password, email, API key) are written as `[REDACTED]`, at any depth.
+- As a backstop, attributes whose key looks secret or personal (token, cookie, session, password, webhook, email, API key) are written as `[REDACTED]`, at any depth.
 - Circular values, very deep objects, and values that cannot be serialized never make logging throw; the logger falls back to the plain message.
 
 ## Collecting the logs

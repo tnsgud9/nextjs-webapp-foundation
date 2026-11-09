@@ -56,6 +56,7 @@ describe("logger", () => {
       "http.request.header.authorization": "Bearer t",
       sessionId: "s",
       apiKey: "k",
+      webhookUrl: "https://hooks.test/secret",
     });
     const record = loggedErrors()[0];
     expect(record).toMatchObject({
@@ -64,8 +65,9 @@ describe("logger", () => {
       "http.request.header.authorization": "[REDACTED]",
       sessionId: "[REDACTED]",
       apiKey: "[REDACTED]",
+      webhookUrl: "[REDACTED]",
     });
-    expect(JSON.stringify(record)).not.toMatch(/a@b\.c|Bearer/);
+    expect(JSON.stringify(record)).not.toMatch(/a@b\.c|Bearer|hooks\.test/);
   });
 
   it("turns the exception into type, message, stack trace with causes, and Next's digest", async () => {
