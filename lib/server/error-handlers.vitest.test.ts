@@ -3,7 +3,7 @@ import { NextRequest } from "next/server";
 import { describe, expect, it } from "vitest";
 import { ProblemError } from "@/lib/problem";
 import { loggedErrors, SENTRY_EVENT_ID, sentryReports } from "@/test-utils/vitest/setup";
-import { withActionErrorHandler, withRouteErrorHandler } from "./error-handlers";
+import { loadForPage, withActionErrorHandler, withRouteErrorHandler } from "./error-handlers";
 
 const request = () => new NextRequest("http://test/api/items/1?secret=q");
 const failWith = (error: unknown) => async (): Promise<never> => {
@@ -76,5 +76,30 @@ describe("withActionErrorHandler", () => {
 
   it("lets redirect() propagate to Next.js", async () => {
     await expect(withActionErrorHandler(async () => redirect("/login"))()).rejects.toThrow();
+  });
+});
+
+describe("loadForPage", () => {
+  const digestOf = (error: unknown) => (error as { digest?: string }).digest ?? "";
+
+  it("returns what the data/ call returns", async () => {
+    await expect(loadForPage(async () => ({ id: "1" }))).resolves.toEqual({ id: "1" });
+  });
+
+  it.each([404, 403])("shows the not-found page for a %i, so a forbidden resource looks missing", async (status) => {
+    const error = await loadForPage(failWith(new ProblemError(status))).catch((caught: unknown) => caught);
+    expect(digestOf(error)).toMatch(/^NEXT_HTTP_ERROR_FALLBACK;404/);
+  });
+
+  it("redirects a 401 to sign-in", async () => {
+    const error = await loadForPage(failWith(new ProblemError(401))).catch((caught: unknown) => caught);
+    expect(digestOf(error)).toContain(";/login;");
+  });
+
+  it.each([
+    ["another expected failure", new ProblemError(409)],
+    ["an unexpected error", new Error("boom")],
+  ])("rethrows %s for error.tsx", async (_name, original) => {
+    await expect(loadForPage(failWith(original))).rejects.toBe(original);
   });
 });

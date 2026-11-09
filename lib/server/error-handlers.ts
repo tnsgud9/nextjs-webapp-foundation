@@ -1,6 +1,8 @@
 import "server-only";
+import { notFound, redirect } from "next/navigation";
 import type { NextRequest } from "next/server";
-import type { ActionResult } from "@/lib/problem";
+import { SIGN_IN_PATH } from "@/lib/auth";
+import { type ActionResult, ProblemError } from "@/lib/problem";
 import { mapErrorToProblem, mapExpectedError } from "./error-mapper";
 import { REQUEST_ID_HEADER } from "./logger";
 
@@ -57,4 +59,22 @@ export function withActionErrorHandler<Args extends unknown[], T>(
       return { ok: false, problem };
     }
   };
+}
+
+/**
+ * Runs a page's `data/` call and turns its expected failures into what a page shows: a 404 or 403 becomes
+ * `notFound()`, so a forbidden resource looks the same as a missing one, and a 401 redirects to sign-in. Any
+ * other error is rethrown for `error.tsx` and `onRequestError`. Pages have no wrapper of their own, so call it
+ * around each `data/` call in a Server Component.
+ */
+export async function loadForPage<T>(load: () => Promise<T>): Promise<T> {
+  try {
+    return await load();
+  } catch (error) {
+    if (error instanceof ProblemError) {
+      if (error.status === 404 || error.status === 403) notFound();
+      if (error.status === 401) redirect(SIGN_IN_PATH);
+    }
+    throw error;
+  }
 }

@@ -17,7 +17,7 @@ flowchart TD
 
 - The requester comes from `lib/auth.ts` (see [Auth](auth.md)) because anything the client sends can be forged.
 - Arguments are built field by field and results are trimmed to a DTO, because whatever leaves the server reaches the browser.
-- A page that gets a 404 or 403 `ProblemError` catches it and calls `notFound()`. No helper does this; uncaught, it shows the error page.
+- A page calls a data access function through `loadForPage()`, which turns a 404 or 403 `ProblemError` into the not-found page and a 401 into a redirect to sign-in; anything else shows the error page (see [Errors](errors.md#server-pieces)).
 - The same steps apply when a function reads or writes Redis, such as a cache in front of a query, and one function may use both stores. A cached read authorizes after the read instead of before it; see [Redis](redis.md#redis-in-a-data-access-function).
 
 ## Connections

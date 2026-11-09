@@ -56,10 +56,13 @@ Every `type` URI other than `about:blank` starts with `PROBLEM_TYPE_BASE` (`/pro
 | `defineProblemType()` | `lib/problem.ts` | Declares a domain type in `domains/<domain>/`, which imports no server-only module so the client can compare `type`. Throws on a name that is not kebab-case |
 | `withRouteErrorHandler()` | `lib/server/error-handlers.ts` | Wraps a Route Handler |
 | `withActionErrorHandler()` | `lib/server/error-handlers.ts` | Wraps a Server Action, exported as-is from the `"use server"` file, and returns `ActionResult` |
+| `loadForPage()` | `lib/server/error-handlers.ts` | Runs one `data/` call in a Server Component: a 404 or 403 becomes `notFound()`, a 401 redirects to `SIGN_IN_PATH`, and anything else is rethrown |
 | `parseJson()`, `parseSearchParams()`, `parseFormData()`, `parseInput()` | `lib/server/validation.ts` | Validate input and throw a 400 validation Problem |
 | `parseParams()`, `parsePageParams()` | `lib/server/validation.ts` | Validate route params; an invalid param means not found |
 
 ESLint checks the wrapping, so no Server Action or Route Handler skips the mapping ([Server endpoints](../AGENTS.md#server-endpoints); [Architecture](architecture.md#serverclient-boundary) for what lint checks).
+
+Pages have no wrapper, so `loadForPage()` is their counterpart, called around each `data/` call ([Security boundary](../AGENTS.md#security-boundary-client--server), pages). Without it, each page would need its own `try`/`catch`, and a forgotten one would turn an expected 404 into an unexpected error: the error page, and a report to Sentry. A 403 shows the not-found page like a 404, so a forbidden resource looks missing. Any other failure, expected or not, still reaches `error.tsx` and `onRequestError`. Nothing checks that a page uses it, and no page does yet.
 
 ## Client error handling
 
@@ -73,7 +76,8 @@ ESLint checks the wrapping, so no Server Action or Route Handler skips the mappi
 | --- | --- | --- |
 | Server Component, proxy, unexpected Server Action error | `onRequestError` (`lib/server/request-errors.ts`) | Error page with the digest |
 | Route Handler, unexpected error | The error mapping | 500 Problem whose `errorId` is the Sentry event ID |
-| Any expected failure | Neither | The Problem |
+| Route Handler or Server Action, expected failure | Neither | The Problem |
+| Page, expected failure other than 401, 403, or 404 | `onRequestError`, because `loadForPage()` rethrows it | Error page with the digest |
 | Browser | The browser SDK, plus the error pages for errors without a digest; no server log | Error page |
 
 - Route Handler errors never reach `onRequestError`, because the error handler catches them first. That is why two server paths exist.
@@ -92,7 +96,7 @@ ESLint checks the wrapping, so no Server Action or Route Handler skips the mappi
 | `domains/` | Domain problem types, one folder per domain |
 | `lib/server/error-mapper.ts` | Error to Problem, and the log and Sentry for Route Handlers |
 | `lib/server/request-errors.ts` | `onRequestError`: the log and Sentry for other server errors |
-| `lib/server/error-handlers.ts` | Route Handler and Server Action wrappers |
+| `lib/server/error-handlers.ts` | Route Handler and Server Action wrappers, and `loadForPage()` for pages |
 | `lib/server/validation.ts` | Input and route param validation |
 | `lib/ky.ts` | Client-side Problem handling |
 | `instrumentation.ts`, `instrumentation-client.ts`, `lib/sentry/` | Sentry setup |
@@ -101,5 +105,6 @@ ESLint checks the wrapping, so no Server Action or Route Handler skips the mappi
 ## Related rules
 
 - [Server endpoints](../AGENTS.md#server-endpoints): error handlers, error mapping
+- [Security boundary](../AGENTS.md#security-boundary-client--server): `loadForPage()` around each `data/` call in a page
 - [Observability](../AGENTS.md#observability): Sentry, server logs, health check, validation, Problems, status rules, released problem types
 - [Data fetching](../AGENTS.md#data-fetching): the HTTP client, the retry policy

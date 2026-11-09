@@ -74,8 +74,8 @@ flowchart TD
   Throws -->|no| OK["200"]
 ```
 
-- Pages call `requirePageUser()`, which redirects. `requireUser()` throws a 401 Problem, which a page would show as an unexpected error.
-- A forbidden resource answers 404 like a missing one, so its existence is not revealed.
+- Pages call `requirePageUser()`, which redirects. `requireUser()` throws a 401 Problem, which a page calling it directly would show as an unexpected error. A 401 thrown inside a `data/` call is different: `loadForPage()` redirects it to sign-in too.
+- A forbidden resource answers 404 like a missing one, so its existence is not revealed. `loadForPage()`, around each `data/` call, turns the 403 into the not-found page (see [Errors](errors.md#server-pieces)).
 - The error pages show only the digest, because an error message can carry internal details.
 - There is no root `loading.tsx`: a root loading boundary streams every page, after which `redirect()` and `notFound()` can no longer set the status code.
 
