@@ -10,7 +10,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Project guidelines
 
-This is a web application built on the Next.js App Router. Keep shared infrastructure (`lib/`, `components/ui/`, `components/shared/`, `config/`) free of domain-specific names and business logic; put domain code in `data/`, the routes under `app/`, and each domain's own module.
+This is a web application built on the Next.js App Router. Keep shared infrastructure (`lib/`, `components/ui/`, `components/shared/`, `config/`) free of domain-specific names and business logic; put domain code in `data/` (server), `domains/<domain>/` (code the server and the browser share), and the routes under `app/`.
 
 ## Structure
 
@@ -37,6 +37,7 @@ config/
 ├── env.ts               # Public environment variables (NEXT_PUBLIC_*)
 └── env.server.ts        # Server-only environment variables
 data/                    # Data access layer (server-only): the only code that uses the database and Redis
+domains/                 # Domain code the server and the browser share, one folder per domain (no server-only imports)
 notifications/           # Kinds of notification, one file each (server-only), sent with notify() from lib/notify
 hooks/                   # Client hooks
 ├── use-mobile.ts        # From shadcn (sidebar), do not edit
@@ -98,6 +99,7 @@ proxy.ts                 # Request proxy (Supabase session refresh)
 
 ### Server / client boundary
 - Folders group code by feature, not by runtime. The runtime boundary is enforced per module: a server-only module starts with `import "server-only"`, a client-only module with `import "client-only"`. Shared modules import neither and must not import a guarded module. Names such as `*.server.ts` or `lib/server/` are hints, not guards.
+- Domain code both sides use (problem types, input schemas a form and its Server Action share, constants) goes in `domains/<domain>/`, which imports no server-only module (enforced by ESLint), so client code can import any of it. Server logic for a domain stays in `data/`.
 - Add the guard to every new module that reads server secrets, touches the database, uses `next/headers` / `next/server`, or depends on browser-only APIs.
 - Prisma Client values (`@/prisma/client`) are imported only in `data/**`, `lib/db.ts`, and `lib/server/**` (enforced by ESLint). Elsewhere use `import type`, and `@/prisma/browser` for `Decimal`, enums, and `JsonNull`.
 
@@ -160,7 +162,7 @@ The `endpoint-review` skill runs this checklist over a change or the whole app.
 - `/api/health` stays a cheap liveness check: no database, no external calls, no internal state in the response.
 - Validate all external input (JSON body, search params, FormData, route params, action arguments) with zod through `@/lib/server/validation` before using it. An invalid route param means not found: `parseParams()` throws a 404 Problem in Route Handlers, and `parsePageParams()` calls `notFound()` in pages.
 - Failures are RFC 9457 Problems (`@/lib/problem`). Signal expected failures by throwing `ProblemError`: pass a status number for status-only failures, or a domain problem type.
-- Define domain problem types in the domain's own module with `defineProblemType()`, never in `lib/problem.ts`. Keep those modules free of server-only imports so the client can compare `type` values. Never rename a released type.
+- Define domain problem types in `domains/<domain>/` with `defineProblemType()` and a kebab-case name, never in `lib/problem.ts`, so the client can import them and compare `type` values. Never rename a released type.
 - Status rules: client input validation 400, conflict with current state 409, valid input that breaks a business rule 422, missing target 404, auth 401/403, rate limit exceeded 429.
 - `detail` and extension members reach the client, so keep internal details out of them. Clients branch on `type` only, never on `title` or `detail`.
 - Server Actions return expected failures in `ActionResult`; forms handle only those. Never rely on a thrown error's message reaching the client.

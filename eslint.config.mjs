@@ -64,11 +64,36 @@ const RESTRICTED = {
   },
 };
 
+// Server-only modules that server code may import anywhere, but that code shared with the browser (domains/)
+// must not, so a client component can import any domain module.
+const SERVER_ONLY = {
+  group: [
+    "server-only",
+    "next/headers",
+    "next/server",
+    "**/data/*",
+    "**/lib/server/*",
+    "**/lib/auth",
+    "**/lib/notify",
+    "**/lib/notify/*",
+    "**/lib/redis/*",
+    "**/lib/supabase/server",
+    "**/lib/supabase/proxy",
+    "**/lib/supabase/auth-deadline",
+    "**/lib/sentry/server",
+  ],
+  source: String.raw`^(server-only|next\x2Fheaders|next\x2Fserver)$|\x2F(data\x2F.+|lib\x2F(server\x2F.+|auth|notify(\x2F.+)?|redis\x2F.+|supabase\x2F(server|proxy|auth-deadline)|sentry\x2Fserver))$`,
+  allowTypeImports: true,
+  message:
+    "domains/ is shared by server and browser code, so it imports no server-only module. Put server logic in data/.",
+};
+
 /** The boundary for files that may import only the named modules of RESTRICTED: every other one is blocked. */
-function boundary(...allowed) {
-  const entries = Object.entries(RESTRICTED)
-    .filter(([name]) => !allowed.includes(name))
-    .map(([, entry]) => entry);
+const boundary = (...allowed) =>
+  restrict(Object.entries(RESTRICTED).filter(([name]) => !allowed.includes(name)).map(([, entry]) => entry));
+
+/** Blocks the given modules, by static import and by import() / require(). */
+function restrict(entries) {
   return {
     "@typescript-eslint/no-restricted-imports": [
       "error",
@@ -122,7 +147,7 @@ const ROUTE_EXPORTS = [
 
 // Notifications are sent only from entry points, the places that call data/ and know whether it succeeded.
 // App code imports `notify` only in a "use server" file or a Route Handler; `defineNotification` and types
-// import anywhere. Namespace and default imports, sendNotification, dynamic imports, require(), value
+// import anywhere this rule runs (the domains/ boundary keeps the server-only module out of shared code). Namespace and default imports, sendNotification, dynamic imports, require(), value
 // re-exports, and values from the module's own files are rejected in every app file.
 const NOTIFY_INDEX = String.raw`\x2Fnotify(\x2Findex)?$`;
 const NOTIFY_ANY = String.raw`\x2Fnotify(\x2F.+)?$`;
@@ -202,6 +227,12 @@ const eslintConfig = defineConfig([
     name: "server boundary: server env test",
     files: ["config/env.server.vitest.test.ts"],
     rules: boundary("serverEnv"),
+  },
+  {
+    // Domain code shared by server and browser: problem types, input schemas, constants.
+    name: "server boundary: domains",
+    files: ["domains/**"],
+    rules: restrict([...Object.values(RESTRICTED), SERVER_ONLY]),
   },
   {
     // data/ functions only ever export authorized results (DTOs).

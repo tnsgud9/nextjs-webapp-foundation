@@ -59,17 +59,19 @@ Solid arrows are allowed imports; dashed arrows fail the build.
 | Kind | Guard at the top of the module | Examples |
 | --- | --- | --- |
 | Server-only code | `import "server-only"` | `data/`, `lib/auth.ts`, `lib/db.ts`, `lib/redis/`, `lib/server/`, `lib/supabase/server.ts` |
-| Shared code | none, and it imports no guarded module | `lib/problem.ts`, `lib/csp.ts`, `config/env.ts` |
+| Shared code | none, and it imports no guarded module | `domains/`, `lib/problem.ts`, `lib/csp.ts`, `config/env.ts` |
 | Client-only code | `import "client-only"` | `lib/sentry/client.ts`, modules that need browser-only APIs |
 
-ESLint adds the import rules a guard cannot express: who may import the Prisma Client, Prisma values, server secrets (also the server env module's own test, which loads it with test values), the Redis client (only `data/`, like the Prisma Client), and the `redis` package (only `lib/redis/` and the test Redis helpers). Its rules match a module by its import path (aliased or relative paths by their end), also catch dynamic `import()` / `require()`, and are themselves tested in `eslint.config.vitest.test.ts`. A separate rule limits where the notify module is imported, so only entry points send notifications (see [Notifications](notifications.md#from-the-caller-to-the-chat-service)).
+Domain code is split the same way: server logic in `data/`, and what both sides use in `domains/<domain>/`, because `lib/` stays free of domain code (see [Server / client boundary](../AGENTS.md#server--client-boundary)).
+
+ESLint adds the import rules a guard cannot express: who may import the Prisma Client, Prisma values, server secrets (also the server env module's own test, which loads it with test values), the Redis client (only `data/`, like the Prisma Client), and the `redis` package (only `lib/redis/` and the test Redis helpers). `domains/` may import none of these, and no server-only module either: `server-only`, `next/headers`, `next/server`, `data/`, and the server-only modules in `lib/` (a test lists every module guarded with `server-only`). Type imports from any of them stay allowed. Its rules match a module by its import path (aliased or relative paths by their end), also catch dynamic `import()` / `require()`, and are themselves tested in `eslint.config.vitest.test.ts`. A separate rule limits where the notify module is imported, so only entry points send notifications (see [Notifications](notifications.md#from-the-caller-to-the-chat-service)).
 
 ESLint also checks how Server Actions and Route Handlers are exported, so neither can skip the error handler and its Problem mapping and reporting ([Server endpoints](../AGENTS.md#server-endpoints) has the rule; see [Errors](errors.md#server-pieces) for the handlers):
 - An export the rule cannot see through, such as an alias or a re-export, is rejected rather than trusted.
 - In route files, named exports other than HTTP methods, such as route config, are not checked, while default and export-all exports are rejected.
 - Route files keep the same server boundary rules as the rest of `app/`.
 
-In `eslint.config.mjs`, static boundary imports use `@typescript-eslint/no-restricted-imports`, and each other check is the built-in syntax restriction under its own name: `project/dynamic-imports`, `project/db-usage`, `project/entry-exports`, and `project/notify-imports`. A config block replaces a rule's whole setting for its files, so with one rule per concern a block changes one check without restating the others. One block gives every file the checks it shares; later blocks match narrower paths and change or add checks for them, such as `project/db-usage`, which checks how `data/` uses `db` (see [Security boundary](../AGENTS.md#security-boundary-client--server)). A boundary block names the restricted modules its paths may import, and blocks the rest.
+In `eslint.config.mjs`, static boundary imports use `@typescript-eslint/no-restricted-imports`, and each other check is the built-in syntax restriction under its own name: `project/dynamic-imports`, `project/db-usage`, `project/entry-exports`, and `project/notify-imports`. A config block replaces a rule's whole setting for its files, so with one rule per concern a block changes one check without restating the others. One block gives every file the checks it shares; later blocks match narrower paths and change or add checks for them, such as `project/db-usage`, which checks how `data/` uses `db` (see [Security boundary](../AGENTS.md#security-boundary-client--server)). A boundary block names the restricted modules its paths may import, and blocks the rest; the `domains/` block allows none of them and blocks the server-only modules too.
 
 ## Client-side data
 
@@ -92,6 +94,7 @@ In `eslint.config.mjs`, static boundary imports use `@typescript-eslint/no-restr
 | --- | --- |
 | `proxy.ts` | Request proxy: CSP nonce and session refresh |
 | `data/` | Data access layer |
+| `domains/` | Domain code the server and the browser share, one folder per domain |
 | `lib/auth.ts` | Requester identity |
 | `lib/db.ts` | Prisma Client |
 | `lib/redis/client.ts` | Redis client |
@@ -99,7 +102,7 @@ In `eslint.config.mjs`, static boundary imports use `@typescript-eslint/no-restr
 | `lib/problem.ts` | Error contract shared by server and client |
 | `lib/ky.ts`, `lib/query-client.ts`, `components/query-provider.tsx` | HTTP client and TanStack Query |
 | `config/env.ts`, `config/env.server.ts` | Public and server-only environment variables |
-| `eslint.config.mjs` | The import boundary rules, how `data/` uses `db`, the notification import rule, and the Server Action and Route Handler export rules |
+| `eslint.config.mjs` | The import boundary rules, including what `domains/` may import, how `data/` uses `db`, the notification import rule, and the Server Action and Route Handler export rules |
 | `app/layout.tsx` | Root layout and providers |
 | `components/ui/`, `components/shared/`, `components.json` | shadcn source and derived components |
 | `hooks/use-mobile.ts`, `hooks/use-highlighted-code.ts`, `lib/highlighter.tsx` | shadcn source outside `components/ui/` |
@@ -109,7 +112,7 @@ In `eslint.config.mjs`, static boundary imports use `@typescript-eslint/no-restr
 
 ## Related rules
 
-- [Server / client boundary](../AGENTS.md#server--client-boundary): guards, Prisma imports
+- [Server / client boundary](../AGENTS.md#server--client-boundary): guards, shared domain code, Prisma imports
 - [Security boundary](../AGENTS.md#security-boundary-client--server): data access layer, identity, lint boundary, return values, mass assignment, rate limiting, audit checklist
 - [Redis](../AGENTS.md#redis): Redis only through the data access layer
 - [Server endpoints](../AGENTS.md#server-endpoints): error handler on every exported Server Action and Route Handler

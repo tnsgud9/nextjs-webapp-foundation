@@ -53,7 +53,7 @@ Every `type` URI other than `about:blank` starts with `PROBLEM_TYPE_BASE` (`/pro
 | Piece | Location | Role |
 | --- | --- | --- |
 | `ProblemError` | `lib/problem.ts` | Thrown for expected failures, with a status number or a domain problem type |
-| `defineProblemType()` | `lib/problem.ts` | Declares a domain type in the domain's own module, which stays free of server-only imports so the client can compare `type` |
+| `defineProblemType()` | `lib/problem.ts` | Declares a domain type in `domains/<domain>/`, which imports no server-only module so the client can compare `type`. Throws on a name that is not kebab-case |
 | `withRouteErrorHandler()` | `lib/server/error-handlers.ts` | Wraps a Route Handler |
 | `withActionErrorHandler()` | `lib/server/error-handlers.ts` | Wraps a Server Action, exported as-is from the `"use server"` file, and returns `ActionResult` |
 | `parseJson()`, `parseSearchParams()`, `parseFormData()`, `parseInput()` | `lib/server/validation.ts` | Validate input and throw a 400 validation Problem |
@@ -89,6 +89,7 @@ ESLint checks the wrapping, so no Server Action or Route Handler skips the mappi
 | File | Role |
 | --- | --- |
 | `lib/problem.ts` | Problem contract, `ProblemError`, `ActionResult` |
+| `domains/` | Domain problem types, one folder per domain |
 | `lib/server/error-mapper.ts` | Error to Problem, and the log and Sentry for Route Handlers |
 | `lib/server/request-errors.ts` | `onRequestError`: the log and Sentry for other server errors |
 | `lib/server/error-handlers.ts` | Route Handler and Server Action wrappers |

@@ -1,3 +1,4 @@
+import { globSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { ESLint } from "eslint";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -73,6 +74,50 @@ describe("bypass attempts outside data/", () => {
   it("lets only the server env module's own test load it", async () => {
     expect(await violations("config/env.server.vitest.test.ts", 'export const x = () => import("./env.server");\n')).toBe(0);
     expect(await violations("config/env.server.vitest.test.ts", DYNAMIC_DB)).toBeGreaterThan(0);
+  });
+});
+
+describe("domains/ (shared by server and browser)", () => {
+  const FILE = "domains/probe/problems.ts";
+
+  it.each([
+    ["server-only", 'import "server-only";\nexport const x = 1;\n'],
+    ["next/headers", 'import { headers } from "next/headers";\nexport const x = headers;\n'],
+    ["a data/ function", 'import { getItem } from "@/data/items";\nexport const x = getItem;\n'],
+    ["a relative data/ import", 'import { getItem } from "../../data/items";\nexport const x = getItem;\n'],
+    ["lib/server", 'import { logger } from "@/lib/server/logger";\nexport const x = logger;\n'],
+    ["lib/auth", 'import { requireUser } from "@/lib/auth";\nexport const x = requireUser;\n'],
+    ["notify", 'import { notify } from "@/lib/notify";\nexport const x = notify;\n'],
+    ["the Redis model helper", 'import { defineRedisModel } from "@/lib/redis/model";\nexport const x = defineRedisModel;\n'],
+    ["the server Supabase client", 'import { createClient } from "@/lib/supabase/server";\nexport const x = createClient;\n'],
+    ["server env", SERVER_ENV],
+    ["the database", DB],
+    ["a dynamic import of a data/ function", 'export const x = () => import("@/data/items");\n'],
+  ])("blocks %s", async (_name, code) => {
+    expect(await violations(FILE, code)).toBeGreaterThan(0);
+  });
+
+  // Every module guarded with `import "server-only"`, so a new one cannot be left off the list in eslint.config.mjs.
+  const serverOnlyModules = globSync(["lib/**/*.ts", "data/**/*.ts", "config/*.ts"])
+    .filter((file) => !file.includes(".test.") && readFileSync(file, "utf8").startsWith('import "server-only";'))
+    .map((file) => `@/${file.replaceAll("\\", "/").replace(/\.ts$/, "")}`);
+
+  it("finds the server-only modules", () => {
+    expect(serverOnlyModules).toContain("@/lib/auth");
+  });
+
+  it.each(serverOnlyModules)("blocks the server-only module %s, statically and dynamically", async (module) => {
+    expect(await violations(FILE, `import * as m from "${module}";\nexport const x = m;\n`)).toBeGreaterThan(0);
+    expect(await violations(FILE, `export const x = () => import("${module}");\n`)).toBeGreaterThan(0);
+  });
+
+  it("allows problem types, schemas, the browser Prisma build, other domain files, and server types", async () => {
+    const SHARED =
+      'import { z } from "zod";\nimport { defineProblemType } from "@/lib/problem";\nimport { Prisma } from "@/prisma/browser";\n' +
+      'import { LIMIT } from "../other/constants";\nimport type { NextRequest } from "next/server";\n' +
+      'export const ItemLocked = defineProblemType("item-locked", "Item Locked", 422);\n' +
+      "export const schema = z.object({ qty: z.number().max(LIMIT) });\nexport const d = Prisma.Decimal;\nexport type R = NextRequest;\n";
+    expect(await violations(FILE, SHARED)).toBe(0);
   });
 });
 

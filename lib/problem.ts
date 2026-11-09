@@ -3,7 +3,7 @@
  *
  * - Clients branch on `type` only. `title` and `detail` are human-readable text.
  * - Failures fully described by the status code use `type: "about:blank"` with the HTTP status phrase as `title`.
- * - Domain-specific failures are defined with `defineProblemType()` in each domain module. This file
+ * - Domain-specific failures are defined with `defineProblemType()` in `domains/<domain>/`. This file
  *   holds only the app-wide types.
  * - Route Handlers return the Problem as the response body; Server Actions return only expected
  *   failures in `ActionResult`. Unexpected Server Action errors are handled by `error.tsx`.
@@ -44,8 +44,8 @@ export interface ProblemType {
 const KEBAB_CASE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
 /**
- * Defines a domain problem type. Write `name` in kebab-case and never change it once released: clients
- * branch on the type it makes.
+ * Defines a problem type, in `domains/<domain>/` for a domain. Write `name` in kebab-case and never change it
+ * once released: clients branch on the type it makes.
  */
 export function defineProblemType(name: string, title: string, status: number): ProblemType {
   if (!KEBAB_CASE.test(name)) throw new Error(`Problem type names must be kebab-case: ${name}`);

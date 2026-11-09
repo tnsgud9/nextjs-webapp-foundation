@@ -18,7 +18,7 @@ How the app works, with a diagram for each part. The rules live in [AGENTS.md](.
 
 ## Domains
 
-Each business domain gets its own page in `domains/`, listed here in a `Page | Covers` table. There are no domain pages yet.
+Each business domain gets its own page in `docs/domains/`, listed here in a `Page | Covers` table. There are no domain pages yet.
 
 ## Writing these docs
 
@@ -39,8 +39,8 @@ Every page has these parts, in this order:
 - **Terms.** Use one term per concept across pages: data access layer, entry point, requester, Problem, Client Component, Prisma Client, RLS.
 
 ### Domain pages
-- One page per domain, `domains/<domain>.md`, named after its `prisma/models/<domain>.prisma`. The pages directly in `docs/` stay free of domain names.
-- Same page shape and content rules as the other pages. A domain page covers the domain's models and relations, its state changes, who may read or change each resource at each entry point, its problem types, and its rate-limited endpoints.
+- One page per domain, `docs/domains/<domain>.md`, named after its `prisma/models/<domain>.prisma`. The pages directly in `docs/` stay free of domain names.
+- Same page shape and content rules as the other pages. A domain page covers the domain's models and relations, its state changes, who may read or change each resource at each entry point, its problem types, and its rate-limited endpoints. Its key files table lists `domains/<domain>/` along with `prisma/models/<domain>.prisma` and the domain's `data/` files, so a change to any of them re-checks the page.
 - Rules that apply to one domain only go in a `## Domain rules` section before Key files, not in AGENTS.md, which keeps the rules every domain shares. The rule to read a page before changing its key files brings them to whoever edits the domain.
 
 ### Mermaid

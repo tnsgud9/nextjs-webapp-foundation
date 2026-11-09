@@ -26,7 +26,7 @@ flowchart TD
 - Only entry points know whether their `data/` call succeeded, so ESLint (`project/notify-imports`) lets app code reach the notify module in one way only: `import { notify }`, in a file that starts with `"use server"` or a Route Handler file.
 - Every other way in is rejected in every app file, entry points included: a namespace or default import, a dynamic `import()` or `require()` with a string or template literal, a re-export from the module, and importing `sendNotification()`.
 - The module's own files (`notifier.ts`, `providers/`, `kind.ts`, any `/notify/<file>` but `index`, aliased or relative) give only types, through an `import type` or a type-only re-export, in every app file, entry points included, so no code builds a sender of its own around the notifier or a provider.
-- `defineNotification()` and the types import anywhere from `@/lib/notify`. `lib/notify/`, `test-utils/`, and test files are exempt.
+- The types and `defineNotification()` import anywhere from `@/lib/notify`; only the server boundary keeps the server-only module out of `domains/`. `lib/notify/`, `test-utils/`, and test files are exempt.
 - The module is matched by the end of its path (`/notify` or `/notify/index`), aliased or relative, so a relative `./notify` from `lib/` is caught too.
 - Left to review: whether `notify()` runs after the `data/` call succeeds.
 - The check is a rule of its own, so the Route Handler block can drop the "only in `"use server"` files" part, and the exempt files can turn the check off, without touching the other lint checks (see [Architecture](architecture.md#serverclient-boundary)).
