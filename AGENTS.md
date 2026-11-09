@@ -36,7 +36,7 @@ components/
 config/
 ├── env.ts               # Public environment variables (NEXT_PUBLIC_*)
 └── env.server.ts        # Server-only environment variables
-data/                    # Data access layer (server-only): the only code that queries the database
+data/                    # Data access layer (server-only): the only code that uses the database and Redis
 notifications/           # Kinds of notification, one file each (server-only), sent with notify() from lib/notify
 hooks/                   # Client hooks
 ├── use-mobile.ts        # From shadcn (sidebar), do not edit
@@ -50,6 +50,7 @@ lib/
 ├── problem.ts           # Shared RFC 9457 error contract: Problem, ProblemError, ActionResult
 ├── ky.ts                # HTTP client
 ├── query-client.ts      # TanStack Query client
+├── redis/               # Optional Redis: client.ts (single client, used only by data/), model.ts (defineRedisModel)
 ├── notify/              # Server notifications to a chat service: notify(), defineNotification(), providers/ (server-only)
 ├── sentry/              # Sentry: options.ts (shared), server.ts, client.ts
 ├── server/              # Server-only: error → Problem mapping, error handlers, input validation, structured logger
@@ -59,12 +60,14 @@ docs/                    # How the app works, with diagrams (index: docs/README.
 prisma/
 ├── schema.prisma        # generator / datasource
 └── models/              # Models, one file per domain
+redis/
+└── models/              # Redis models, one file each (defineRedisModel), used only from data/
 .agents/skills/          # Agent skills, identical to .claude/skills/
 .claude/                 # Claude Code: skills/, agents/ (docs-writer, docs-reviewer, endpoint-reviewer), hooks/
 .github/                 # CI workflow (workflows/ci.yml) and its shared setup action
 Dockerfile               # Production image (standalone output); .dockerignore keeps .env out
-docker-compose.yaml      # Development database for pnpm dev (docker:db) and the app container (docker:up)
-docker-compose.test.yaml # Test-only Postgres for local runs (pnpm test:db:up / test:db:down)
+docker-compose.yaml      # Development database for pnpm dev (docker:db), optional Redis (docker:redis), and the app container (docker:up)
+docker-compose.test.yaml # Test-only Postgres and Redis for local runs (pnpm test:db:up / test:db:down)
 instrumentation.ts       # Server start-up entry (loads lib/sentry/server), onRequestError (lib/server/request-errors)
 instrumentation-client.ts # Browser start-up entry (loads lib/sentry/client)
 prisma7.config.ts        # Prisma CLI config
@@ -78,13 +81,13 @@ proxy.ts                 # Request proxy (Supabase session refresh)
 - Update a dependency only for a security fix (a `pnpm audit` failure or a Dependabot alert), a fix or feature the app needs, or a major version leaving support; never on a schedule. Each change updates one package together with the packages that must match it ([Dependency updates](docs/delivery.md#dependency-updates)) and passes the checks below. Once a quarter, check that the major versions of Node, Next.js, React, and Prisma in use are still supported, and plan the move before support ends.
 - Verify changes with `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `pnpm build`. CI (`.github/workflows/ci.yml`) runs these pnpm scripts, plus `prisma validate`, a `prisma format` diff check, and `pnpm audit`; add a new check as a pnpm script first.
 - Node is pinned in `.nvmrc` and `engines`; change both together. CI passes `.nvmrc` to `NODE_VERSION` in `Dockerfile`, whose default only serves local builds.
-- Never hard-code the project name or tool versions in CI or Docker files. Read Node from `.nvmrc` and pnpm from `packageManager`. The one exception is the Postgres image, whose tag appears in `ci.yml`, `docker-compose.yaml`, and `docker-compose.test.yaml`; change the three together.
+- Never hard-code the project name or tool versions in CI or Docker files. Read Node from `.nvmrc` and pnpm from `packageManager`. The exceptions are the Postgres and Redis images, whose tags appear in `ci.yml`, `docker-compose.yaml`, and `docker-compose.test.yaml`; change each image's three together.
 - Docker: keep development and service containers in `docker-compose.yaml` and test-only services in `docker-compose.test.yaml`. Never copy `.env` into an image, add per-variable `ARG` / `ENV` lines, or pass secrets as build arguments: the build receives one env file through the BuildKit secret `build-env`, and the runtime receives container environment variables. The image never runs migrations. The app container reads the same `DATABASE_URL` as everything else; never add a second, container-only database variable.
 - Multiple instances: start every instance of a deployment from the same image, built with one `NEXT_DEPLOYMENT_ID`; when instances run separate builds, give them one `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY`. Keep state instances must share (counters, caches) out of process memory. Give the platform a shutdown grace period of at least 30 seconds after SIGTERM, so in-flight requests and `after()` work finish, and keep instances × `DATABASE_POOL_MAX` within the pooler's client limit.
 - Test files are named after the tool that runs them and sit next to the code they cover: `*.vitest.test.ts` (`pnpm test:vitest`) and `*.playwright.test.ts` (`pnpm test:playwright`). `pnpm test` runs all. A new tool gets its own suffix, script, and `test-utils/<tool>/`.
 - Put shared test setup and helpers in `test-utils/<tool>/` instead of repeating them in test files; code both tools need goes in `test-utils/shared/`, which imports no test tool. Vitest already mocks Sentry (`sentryReports()`), `@/lib/notify` (`sentNotifications()`), and `next/headers` globally (`test-utils/vitest/setup.ts`); use `fakeSupabaseAuth()` when a test needs a signed-in user.
-- Tests never reach a real external service and need no secrets. The database is a real local Postgres (`docker-compose.test.yaml`, started with `pnpm test:db:up`; CI starts the same image). Keep test services in `docker-compose.test.yaml`, separate from any development compose file; Supabase Auth is the fake server in `test-utils/shared/supabase-auth.ts`; Sentry is mocked or intercepted. Never point tests at the Supabase project or the database in `.env`.
-- Vitest projects: `unit` (no external dependencies, parallel) and `db` (`data/**` and `test-utils/**` tests, real database, emptied before each test, one file at a time). Test `data/` functions against the database, including authorization for another user's resource; tests above `data/` mock the `data/` functions they call. Each test creates its own data. `pnpm test:vitest` and `pnpm test:playwright` fail when the database is down; `pnpm test:vitest:unit` skips it.
+- Tests never reach a real external service and need no secrets. The database is a real local Postgres and Redis a real local Redis (`docker-compose.test.yaml`, started with `pnpm test:db:up`; CI starts the same images). Keep test services in `docker-compose.test.yaml`, separate from any development compose file; Supabase Auth is the fake server in `test-utils/shared/supabase-auth.ts`; Sentry is mocked or intercepted. Never point tests at the Supabase project or the database in `.env`.
+- Vitest projects: `unit` (no external dependencies, parallel) and `db` (`data/**`, the Redis client, and `test-utils/**` tests, real database and Redis, both emptied before each test, one file at a time). Test `data/` functions against the database, including authorization for another user's resource; tests above `data/` mock the `data/` functions they call. Each test creates its own data. `pnpm test:vitest` and `pnpm test:playwright` fail when the test database or the test Redis is down; `pnpm test:vitest:unit` skips them.
 - When you change error mapping, input validation, the error handlers, `lib/auth.ts`, or the ESLint boundary, update the matching Vitest test in the same change. Run Playwright when you change error pages, security headers, page sign-in handling, or Sentry setup.
 - Pages that exist only for Playwright go in `app/playwright/` as `page.playwright.tsx`; never give them a plain `page.tsx` name, or they ship to production.
 - Database: `pnpm db:generate` / `db:migrate` / `db:deploy` / `db:studio`
@@ -99,7 +102,7 @@ proxy.ts                 # Request proxy (Supabase session refresh)
 ### Security boundary (client → server)
 Every Server Action and Route Handler is a public endpoint that anyone can call with any input, whether or not the UI uses it. Prisma bypasses RLS, so the server code is the only line of defense.
 
-- **Data access layer**: only `data/**` imports `@/lib/db` (enforced by ESLint), and server secrets (`@/config/env.server`) are read only in `data/**` and server-only `lib/` modules. Every `data/` function authenticates with `@/lib/auth`, authorizes the requester against the specific resource (ownership, tenant, role), and then queries.
+- **Data access layer**: only `data/**` imports `@/lib/db` and `@/lib/redis/client` (enforced by ESLint), and server secrets (`@/config/env.server`) are read only in `data/**` and server-only `lib/` modules. Every `data/` function authenticates with `@/lib/auth`, authorizes the requester against the specific resource (ownership, tenant, role), and then queries.
 - **Identity**: get the requester only from `getCurrentUser()` / `requireUser()` in `@/lib/auth`. Supabase Auth calls on the request path run under `createAuthDeadline()` (`@/lib/supabase/auth-deadline`); give a new Auth call on the request path the same limit, and pass the deadline's `fetch` only to a Supabase client used for nothing but auth, since it limits every call that client makes. Never trust a user ID, role, or tenant ID sent by the client, and never use Supabase `getSession()` for auth decisions. `requireUser()` rejects Supabase anonymous users; pass `allowAnonymous: true` only where anonymous use is intended.
 - **Lint boundary**: the ESLint boundary matches restricted modules by the end of the path (aliased or relative), also rejects dynamic `import()` / `require()` of them, and covers `.js` files. In `data/`, use `db` only as `db.<model>` / `db.$...`; never rename, return, pass on, or export it. Never bypass it with `eslint-disable`.
 - **Return values**: `data/` functions return DTOs with only the fields the caller needs, never raw Prisma records. The same applies to Server Action return values and props passed to Client Components; everything there is serialized to the browser.
@@ -120,7 +123,7 @@ Audit checklist for any change that adds or edits an endpoint:
 The `endpoint-review` skill runs this checklist over a change or the whole app.
 
 ### Environment variables
-- Never read `process.env` directly. Add public variables to the zod schema in `config/env.ts` and server-only variables to `config/env.server.ts`, then use them from there. The only exceptions are build-time values outside app code: `CI` and `PLAYWRIGHT` in `next.config.ts` and the `SENTRY_*` build variables read by the Sentry plugin, `NEXT_OUTPUT_STANDALONE` in `next.config.ts` (set only by `Dockerfile`), the test-only `TEST_DATABASE_URL` read in `test-utils/shared/test-database.ts` (tests do not load `.env`, so it is not in `.env.example`), `NODE_ENV`, which Next.js sets and inlines at build time, and `NEXT_DEPLOYMENT_ID` / `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY`, which Next.js reads during the build (set them in `build-env`).
+- Never read `process.env` directly. Add public variables to the zod schema in `config/env.ts` and server-only variables to `config/env.server.ts`, then use them from there. The only exceptions are build-time values outside app code: `CI` and `PLAYWRIGHT` in `next.config.ts` and the `SENTRY_*` build variables read by the Sentry plugin, `NEXT_OUTPUT_STANDALONE` in `next.config.ts` (set only by `Dockerfile`), the test-only `TEST_DATABASE_URL` and `TEST_REDIS_URL` read in `test-utils/shared/` (tests do not load `.env`, so they are not in `.env.example`), `NODE_ENV`, which Next.js sets and inlines at build time, and `NEXT_DEPLOYMENT_ID` / `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY`, which Next.js reads during the build (set them in `build-env`).
 - Never expose secrets as `NEXT_PUBLIC_*`.
 - Add every new variable to `.env.example` with a description.
 
@@ -137,6 +140,13 @@ The `endpoint-review` skill runs this checklist over a change or the whole app.
 - Model conventions: snake_case names through `@@map` / `@map`, `DateTime` as `@db.Timestamptz`, `Decimal` for fractional values, and an index that starts with every foreign key column: an explicit `@@index`, or a `@unique` / `@@unique` / `@@id` the model already has (a one-to-one relation needs `@unique`). Never add an `@@index` whose columns another index already starts with. `Float` is approximate, so use it only where an approximate value is enough, with a `///` comment on the field saying why.
 - `prisma/models.vitest.test.ts` checks these model rules and the pinned Prisma versions; fix a model rather than the test.
 - Pin `prisma`, `@prisma/client`, and `@prisma/adapter-pg` to the same exact version.
+
+### Redis
+- Redis is the app's cache, on the premise that nothing in it is permanent: any key can disappear at any time. Use it for data the app can rebuild from its source (the database or an outside service) or can afford to lose; data that must last belongs in the database. Redis is optional, so the app runs without `REDIS_URL`.
+- Run Redis with a memory limit and `maxmemory-policy allkeys-lru`, so when memory is full it drops keys it has seen least recently used (an approximation), whatever they are, to make room instead of refusing writes. A write can still fail, like any Redis command, and is handled as such.
+- Use Redis only in the data access layer (`data/**`), through `getRedis()` from `@/lib/redis/client` (enforced by ESLint). The data access layer rules apply to it as to the database: authenticate, authorize the requester against the resource, return DTOs. Each `data/` function decides what happens when Redis is absent or fails.
+- Define each kind of key in its own file, `redis/models/<name>.ts`, as `export const <Name>Model = defineRedisModel("<name>")`, or with `{ value }` for a structured value. Build keys only with `model.key()`, pass `model.writeOptions()` to every `SET`, and check structured values with its schema. Keys do not expire by default; a write gives a TTL (`model.writeOptions(seconds)`) only where an expiry means something. `lib/redis/model-files.vitest.test.ts` checks the files.
+- Never run commands that scan or clear the whole server (`KEYS`, `FLUSHALL`, `FLUSHDB`) in app code.
 
 ### Server endpoints
 - Wrap every exported Route Handler in `withRouteErrorHandler()` and every exported Server Action in `withActionErrorHandler()` (both from `@/lib/server/error-handlers`), as `export const NAME = with...(...)`; ESLint rejects any other export from a `"use server"` file except types, and any other HTTP method, default, or export-all export from a `route.ts`. Route Handlers return their own `Response` on success. Do not hand-roll `try`/`catch` error responses.

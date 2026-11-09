@@ -8,11 +8,12 @@ What each test tool runs against. Tests never reach a real external service, so 
 flowchart TD
   Test["pnpm test"] --> Vitest["Vitest"]
   Test --> PW["Playwright"]
-  Vitest --> Unit["unit project: no database, files in parallel"]
-  Vitest --> DbProj["db project: data access and test helper tests, one file at a time"]
-  DbProj --> Setup["Database setup"]
+  Vitest --> Unit["unit project: no database or Redis, files in parallel"]
+  Vitest --> DbProj["db project: data access, Redis client, and test helper tests, one file at a time"]
+  DbProj --> Setup["Database and Redis setup"]
   PW --> Setup
   Setup --> TestDB[("Test Postgres on localhost")]
+  Setup --> TestRedis[("Test Redis on localhost")]
   Unit -->|"tests that need a signed-in user"| FakeAuth["Fake Supabase Auth server"]
   DbProj -->|"tests that need a signed-in user"| FakeAuth
   PW --> FakeAuth
@@ -23,6 +24,7 @@ flowchart TD
 | Dependency | In tests | Why |
 | --- | --- | --- |
 | Database | A real, disposable Postgres: `docker-compose.test.yaml` locally, the same image as a CI service container | Authorization and constraints in the data access layer are the only line of defense, and a mocked Prisma would pass them all |
+| Redis | A real, disposable Redis without persistence: `docker-compose.test.yaml` locally, the same image as a CI service container, given the same settings once it is up | The client's connection handling behaves as in production only against a real server |
 | Supabase Auth | A local fake server that serves the signing keys and answers refresh-token exchanges. Tokens are really signed, so `getClaims()` really verifies them | The tests cover how this code handles Supabase, not Supabase itself |
 | Sentry | Vitest mocks it; Playwright intercepts what the browser sends | Nothing is ever sent |
 | Chat service | Vitest mocks `@/lib/notify`; the tests of `lib/notify` itself import its modules directly and stub `fetch`. See [Notifications](notifications.md#notifications-in-tests) | Nothing is ever sent; tests check which kind of notification code asked to send, and with what data |
@@ -37,21 +39,23 @@ flowchart TD
   Local -->|no| Stop1["Fail: refuses any other host"]
   Local -->|yes| Reach{"Reachable?"}
   Reach -->|no| Stop2["Fail, with how to start it"]
-  Reach -->|yes| Migrate["Apply the migrations"]
+  Reach -->|yes| Redis{"Redis on localhost and reachable? Empty it"}
+  Redis -->|no| Stop2
+  Redis -->|yes| Migrate["Apply the migrations"]
   Migrate --> Diff{"Schema matches the migrations?"}
   Diff -->|no| Stop3["Fail: a migration is missing"]
-  Diff -->|yes| Run["Run tests; the db project empties every table before each test"]
+  Diff -->|yes| Run["Run tests; the db project empties every table and Redis before each test"]
 ```
 
-- The tests empty every table, so the localhost check keeps them away from any shared database. `TEST_DATABASE_URL` can override the default address, but only with another localhost address.
-- A down database fails the run instead of skipping tests, so a green run always means the data access layer was tested.
-- Only the data access layer touches the database, so tests above it mock the data access functions they call.
+- The tests empty every table and the whole Redis database, so the localhost checks keep them away from any shared database or Redis. `TEST_DATABASE_URL` and `TEST_REDIS_URL` can override the default addresses, but only with other localhost addresses.
+- A down database or Redis fails the run instead of skipping tests, so a green run always means the data access layer was tested. Playwright goes through the same setup and starts the app with the test Redis, so it needs the test Redis too.
+- Only the data access layer touches the database and Redis, so tests above it mock the data access functions they call.
 - When many tests build the same records, add a factory per model under `test-utils/`.
 - RLS is not tested, because no table is exposed through the Data API. Once one is, its policies need the Supabase local stack, as a separate test lane.
 
 ## Playwright
 
-- It starts the fake Auth server, then builds and starts the app with `PLAYWRIGHT=1`, pointing it at the test database and the fake server.
+- It starts the fake Auth server, then builds and starts the app with `PLAYWRIGHT=1`, pointing it at the test database, the test Redis, and the fake server.
 - Pages built only for Playwright, some of which fail on purpose, live in `app/playwright/` as `page.playwright.tsx`. Only a `PLAYWRIGHT=1` build treats them as pages, so they never ship.
 - Playwright overwrites `.next`, so rebuild with `pnpm build` before deploying from the same folder.
 
@@ -63,9 +67,11 @@ flowchart TD
 | --- | --- |
 | `shared/supabase-auth.ts` | Fake Auth server and session cookies: valid, anonymous, non-user role, forged, expired, revoked, unanswered |
 | `shared/test-database.ts` | Test database address, localhost-only guard, `resetDatabase()` |
-| `shared/database-setup.ts` | The database setup in the diagrams above |
+| `shared/test-redis.ts` | Test Redis address, localhost-only guard, `resetRedis()` |
+| `shared/database-setup.ts` | The database and Redis setup in the diagrams above |
 | `vitest/setup.ts` | Runs before every Vitest file: mocks Sentry (`sentryReports()`), `@/lib/notify` while still defining kinds for real (`sentNotifications()`, the kind name and data of each `notify()` call in the current test), and `next/headers` (`setRequestCookies()`), and silences error and warning logs (`loggedErrors()`, `loggedWarnings()`) |
-| `vitest/database.ts` | Points the db project at the test database and empties it before each test |
+| `vitest/database.ts` | Points the db project at the test database and Redis and empties them before each test |
+| `vitest/definition-files.ts` | The shared check on folders with one definition per file: kinds of notification and Redis models |
 | `vitest/helpers.ts` | `thrown()`, and `importWithEnv()` to reload a module with other variables |
 | `vitest/supabase-auth.ts` | `fakeSupabaseAuth()` starts the fake Auth server for one test file, for any test that needs a signed-in user |
 | `playwright/supabase-auth.ts`, `playwright/supabase-auth-server.mjs` | Fixed Auth address for the build, the server entry, `sessionCookieHeader()` |
@@ -89,9 +95,11 @@ flowchart TD
 | `lib/query-client.vitest.test.ts` | No retry on a 4xx, one retry on a 5xx or network error, a new client per server request and one client in the browser, a one-minute stale time, and no refetch on window focus |
 | `lib/server/logger.vitest.test.ts` | Log line format, service and environment fields, redaction, exceptions, never throwing |
 | `lib/notify/**/*.vitest.test.ts` | Sending after the response, skipping without a destination, the https-only variable, render and send failures logged without the webhook URL, flat data and kebab-case names for kinds, the layout of the files in `notifications/`, the global mock, the chat message format, escaping, limits, and the single 429 retry |
+| `lib/redis/client.vitest.test.ts` | Against the test Redis: no client without `REDIS_URL`, one reused connection, and an unreachable server rejected, tried again on the next call, and logged without its address |
+| `lib/redis/model.vitest.test.ts`, `lib/redis/model-files.vitest.test.ts` | Redis model keys, kebab-case names, write options (no TTL by default, a whole-second TTL on request), value checks, and value types, and the layout of the files in `redis/models/` |
 | `config/env.vitest.test.ts` | Environment variable parsing, and when the showcase opens |
 | `data/db.vitest.test.ts` | The data access layer reaches the test database, never the one in `.env` |
-| `test-utils/shared/test-database.vitest.test.ts` | The localhost-only guard and the table reset |
+| `test-utils/shared/test-database.vitest.test.ts`, `test-utils/shared/test-redis.vitest.test.ts` | The localhost-only guards, the table reset, and the Redis reset |
 | `docs/docs.vitest.test.ts` | Docs, the AGENTS.md structure tree, environment variable lists, the two skill folders, and the CLAUDE.md list of skills and subagents stay in step (see [Writing these docs](README.md#keeping-docs-current)) |
 | `.claude/hooks/*.vitest.test.ts` | The subagent hooks block the docs writer's edits outside the docs Markdown, and every Bash command but the read-only ones the subagents share, including git options that write a file when quoted, abbreviated, or brace-expanded |
 | `app/(design-system)/components/showcase.vitest.test.ts` | Every component in `components/ui/` and `components/shared/` is in the showcase, and every card is registered |
@@ -103,8 +111,8 @@ flowchart TD
 | File | Role |
 | --- | --- |
 | `vitest.config.mts` | Vitest projects `unit` and `db` |
-| `playwright.config.ts` | Fake Auth server, `PLAYWRIGHT=1` build, test database |
-| `docker-compose.test.yaml` | The local test database |
+| `playwright.config.ts` | Fake Auth server, `PLAYWRIGHT=1` build, test database and Redis |
+| `docker-compose.test.yaml` | The local test database and test Redis |
 | `test-utils/` | Shared setup and helpers |
 | `app/playwright/` | Pages built only for Playwright |
 

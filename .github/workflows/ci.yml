@@ -19,7 +19,7 @@ jobs:
     name: Lint, types, Vitest, build
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    # Test database for the Vitest `db` project and Playwright. Same image and address as docker-compose.test.yaml, so the credentials are not secret.
+    # Test database and Redis for the Vitest `db` project and Playwright. Same images and addresses as docker-compose.test.yaml, so the credentials are not secret.
     services: &test-db
       test-db:
         image: postgres:17-alpine
@@ -33,9 +33,23 @@ jobs:
           --health-interval 2s
           --health-timeout 5s
           --health-retries 20
+      test-redis:
+        image: redis:8-alpine
+        ports: ["6380:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 20
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
+      # Service containers take no command, so the test Redis gets the settings docker-compose.test.yaml gives it
+      # (AGENTS.md, Redis) once it is up.
+      - name: Configure the test Redis
+        run: >-
+          docker exec "${{ job.services.test-redis.id }}"
+          redis-cli CONFIG SET maxmemory 64mb maxmemory-policy allkeys-lru save "" appendonly no
 
       - name: Prisma schema
         run: |
@@ -59,6 +73,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
+      # Service containers take no command, so the test Redis gets the settings docker-compose.test.yaml gives it
+      # (AGENTS.md, Redis) once it is up.
+      - name: Configure the test Redis
+        run: >-
+          docker exec "${{ job.services.test-redis.id }}"
+          redis-cli CONFIG SET maxmemory 64mb maxmemory-policy allkeys-lru save "" appendonly no
 
       - run: pnpm exec playwright install --with-deps chromium
 

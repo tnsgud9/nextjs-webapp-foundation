@@ -10,6 +10,7 @@ A web application built on the Next.js App Router. UI components, environment va
 | Styling / UI | Tailwind CSS 4, shadcn/ui (`base-vega`, Base UI), `cn`, lucide-react, Pretendard |
 | Data fetching | ky (HTTP client), TanStack Query |
 | Database | Prisma ORM 7 (`@prisma/adapter-pg`), Supabase PostgreSQL |
+| Key-value store (optional) | Redis (`redis` client), the app's cache, for data the app can rebuild or afford to lose |
 | Auth (optional) | Supabase Auth (`@supabase/ssr`) — clients and session-refresh proxy |
 | Validation | zod (environment variables and server input) |
 | Linting | ESLint 10 (`eslint-config-next`) |
@@ -19,6 +20,7 @@ A web application built on the Next.js App Router. UI components, environment va
 
 - Node.js 26 (pinned in `.nvmrc` and `engines`; CI uses the same file)
 - pnpm 12 (pinned via the `packageManager` field). Install it as described in the [pnpm installation guide](https://pnpm.io/installation); any pnpm 12 switches to the pinned version inside the project. Node.js 26 no longer ships corepack.
+- Docker with Compose, for the tests (`pnpm test:db:up` starts the test Postgres and Redis) and, if you use them, the local development database, Redis, and production image (`pnpm docker:*`)
 
 ## Getting started
 
@@ -46,6 +48,7 @@ Copy `.env.example` to `.env`. The Prisma CLI loads only `.env` through `dotenv`
 | `DATABASE_POOL_MAX` | Connections each app instance may open. Defaults to `3`. Keep the number of instances times this value within the pooler's client limit. |
 | `DIRECT_URL` | Prisma CLI (migrate, etc.). **Session pooler (5432)**. The direct host is IPv6-only. |
 | `SERVICE_NAME`, `APP_ENV` | `service.name` and `deployment.environment.name` in every server log line. Default to `name` in `package.json`, and to `NODE_ENV`. |
+| `REDIS_URL` | Optional Redis, the app's cache, used only through `data/`. `rediss://` for TLS; it may carry a password, so it is a secret. Leave empty to run without Redis. |
 | `NOTIFY_SLACK_WEBHOOK_URL` | Incoming webhook (`https` only) of the chat channel that receives server notifications; every topic goes there for now. A secret: anyone holding it can post to the channel. Leave empty to skip notifications. |
 | `NEXT_PUBLIC_SENTRY_DSN` | Sentry error reporting from the browser and the server. Leave empty to disable Sentry; errors are then only logged on the server. |
 | `NEXT_PUBLIC_DESIGN_SYSTEM` | `1` opens the `/design-system` showcase in a production build (for example on a preview deployment). Left empty, it answers 404 everywhere except the development server. Read at build time. |
@@ -53,7 +56,7 @@ Copy `.env.example` to `.env`. The Prisma CLI loads only `.env` through `dotenv`
 | `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` | Build only, and only when instances run separate builds of the same version: a shared base64 AES key so a Server Action works on every build. A secret. Instances started from one image need none. |
 | `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT` | Build only: source map upload to Sentry, read by the Sentry build plugin. Set them in the build environment; leave empty to skip the upload. |
 
-Application code never reads `process.env` directly; it goes through the modules below. Invalid values surface as zod errors when the module loads. The exceptions are build-time values outside the app code: `next.config.ts` (`CI`, `PLAYWRIGHT`, `NEXT_OUTPUT_STANDALONE`) and the Sentry build plugin (`SENTRY_*`), `NODE_ENV` (set and inlined by Next.js), `NEXT_DEPLOYMENT_ID` and `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` (read by Next.js during the build), and the test-only `TEST_DATABASE_URL`.
+Application code never reads `process.env` directly; it goes through the modules below. Invalid values surface as zod errors when the module loads. The exceptions are build-time values outside the app code: `next.config.ts` (`CI`, `PLAYWRIGHT`, `NEXT_OUTPUT_STANDALONE`) and the Sentry build plugin (`SENTRY_*`), `NODE_ENV` (set and inlined by Next.js), and `NEXT_DEPLOYMENT_ID` and `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` (read by Next.js during the build), and the test-only `TEST_DATABASE_URL` and `TEST_REDIS_URL`.
 
 - `config/env.ts` — public variables (`NEXT_PUBLIC_*`)
 - `config/env.server.ts` — server-only variables. Anything that must not reach the client bundle belongs here.
@@ -65,14 +68,15 @@ Application code never reads `process.env` directly; it goes through the modules
 | `pnpm dev` | Development server |
 | `pnpm build` / `pnpm start` | Production build / start |
 | `pnpm docker:db` | Start the local development database (`docker-compose.yaml`, port 5432) |
+| `pnpm docker:redis` | Start the optional local Redis (`docker-compose.yaml`, port 6379); set `REDIS_URL` to use it |
 | `pnpm docker:up` / `pnpm docker:down` | Build and start the production image / stop every Compose service |
 | `pnpm lint` | ESLint |
 | `pnpm typecheck` | Generates the Next.js route types (`next typegen`), then runs `tsc --noEmit`. Works on a fresh clone without a prior build |
 | `pnpm test` | All tests (`test:vitest`, then `test:playwright`) |
-| `pnpm test:vitest` | Vitest (`*.vitest.test.ts`). Needs the test database (`pnpm test:db:up`) |
-| `pnpm test:db:up` / `pnpm test:db:down` | Start / stop the test database (`docker-compose.test.yaml`). Its data lives in memory and is gone after stopping |
-| `pnpm test:vitest:unit` | Vitest without the database |
-| `pnpm test:playwright` | Playwright (`*.playwright.test.ts`): builds with `PLAYWRIGHT=1`, starts the app, and drives Chromium. Needs the test database (`pnpm test:db:up`); run `pnpm exec playwright install chromium` once first |
+| `pnpm test:vitest` | Vitest (`*.vitest.test.ts`). Needs the test database and Redis (`pnpm test:db:up`) |
+| `pnpm test:db:up` / `pnpm test:db:down` | Start / stop the test database and Redis (`docker-compose.test.yaml`). Their data lives in memory and is gone after stopping |
+| `pnpm test:vitest:unit` | Vitest without the database and Redis |
+| `pnpm test:playwright` | Playwright (`*.playwright.test.ts`): builds with `PLAYWRIGHT=1`, starts the app, and drives Chromium. Needs the test database and Redis (`pnpm test:db:up`); run `pnpm exec playwright install chromium` once first |
 | `pnpm db:generate` | Generate the Prisma Client (also runs on `postinstall`) |
 | `pnpm db:migrate` | Create and apply migrations on the development database (`prisma migrate dev`) |
 | `pnpm db:deploy` | Apply migrations to the production database (`prisma migrate deploy`) |
@@ -92,7 +96,8 @@ How each part works, with diagrams, lives in [docs/](docs/README.md). The rules 
 | [Architecture](docs/architecture.md) | Layers, the server/client boundary, client-side data, UI components |
 | [Request flow](docs/request-flow.md) | The proxy, security headers and CSP, page responses for sign-in, not found, and errors |
 | [Auth](docs/auth.md) | Requester identity and session refresh |
-| [Data layer](docs/data-layer.md) | The data access layer, database connections, schema, migrations, model conventions |
+| [Data layer](docs/data-layer.md) | The data access layer for the database and Redis, database connections, schema, migrations, model conventions |
+| [Redis](docs/redis.md) | Optional Redis as the app's cache: nothing permanent, eviction, the client, Redis models and their keys, Redis in the data access layer, running without Redis |
 | [Errors](docs/errors.md) | Problems, error handlers, client error handling, Sentry, the health check |
 | [Logging](docs/logging.md) | Structured server logs, request IDs, what is never logged, log collection |
 | [Notifications](docs/notifications.md) | Server notifications to a chat service: kinds of notification, topics and destinations, providers, best-effort delivery |
@@ -104,7 +109,7 @@ Business domain pages are listed under [Domains](docs/README.md#domains).
 
 ## Deployment
 
-1. Register the environment variables (`DATABASE_URL`, Supabase variables, `NEXT_PUBLIC_SENTRY_DSN`, and the build-only `SENTRY_*` variables) on the host.
+1. Register the environment variables (`DATABASE_URL`, Supabase variables, `NEXT_PUBLIC_SENTRY_DSN`, and the build-only `SENTRY_*` variables) on the host, plus `REDIS_URL` when the deployment uses Redis. Configure that Redis as the [Redis](AGENTS.md#redis) rule asks; the app does not (see [Redis as a cache](docs/redis.md#redis-as-a-cache)).
 2. Run the app in the same region as the Supabase project.
 3. `postinstall` generates the Prisma Client during the build. Run migrations separately with `pnpm db:deploy`.
 4. For the Docker image, see [Delivery](docs/delivery.md).

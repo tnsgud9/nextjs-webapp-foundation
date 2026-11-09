@@ -7,7 +7,8 @@ How the app works, with a diagram for each part. The rules live in [AGENTS.md](.
 | [Architecture](architecture.md) | Layers, the server/client boundary, client-side data, UI components |
 | [Request flow](request-flow.md) | The proxy, security headers and CSP, page responses for sign-in, not found, and errors |
 | [Auth](auth.md) | Requester identity and session refresh |
-| [Data layer](data-layer.md) | The data access layer, database connections, schema, migrations, model conventions |
+| [Data layer](data-layer.md) | The data access layer for the database and Redis, database connections, schema, migrations, model conventions |
+| [Redis](redis.md) | Optional Redis as the app's cache: nothing permanent, eviction, the client, Redis models and their keys, Redis in the data access layer, running without Redis |
 | [Errors](errors.md) | Problems, error handlers, client error handling, Sentry, the health check |
 | [Logging](logging.md) | Structured server logs, request IDs, what is never logged, log collection |
 | [Notifications](notifications.md) | Server notifications to a chat service: kinds of notification, topics and destinations, providers, best-effort delivery |

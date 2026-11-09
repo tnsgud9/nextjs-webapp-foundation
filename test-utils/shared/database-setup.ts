@@ -1,10 +1,12 @@
 import { execSync } from "node:child_process";
 import { Client } from "pg";
 import { TEST_DATABASE_URL, assertLocalDatabase } from "./test-database";
+import { TEST_REDIS_URL, resetRedis } from "./test-redis";
 
 /**
  * globalSetup of the tests that use the database (the Vitest `db` project and Playwright), run once before them.
- * Checks that the database is local, fails (instead of skipping) when it is unreachable, and applies the migrations.
+ * Checks that the database and Redis are local, fails (instead of skipping) when either is unreachable, and
+ * applies the migrations.
  */
 export default async function setup(): Promise<void> {
   try {
@@ -23,6 +25,15 @@ export default async function setup(): Promise<void> {
     );
   } finally {
     await client.end().catch(() => {});
+  }
+
+  try {
+    await resetRedis(TEST_REDIS_URL);
+  } catch (error) {
+    fail(
+      `Test Redis is not reachable at ${new URL(TEST_REDIS_URL).host} (${(error as Error).message}). ` +
+        `Start it with "pnpm test:db:up", or run only the tests without services with "pnpm test:vitest:unit".`,
+    );
   }
 
   // The Prisma CLI connects with DIRECT_URL. The value passed here wins over the one in .env.

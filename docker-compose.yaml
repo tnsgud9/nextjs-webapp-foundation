@@ -3,6 +3,8 @@
 # - Development: `pnpm docker:db` starts only db, and the app runs on the host with `pnpm dev` (faster file watching
 #   and HMR). Point DATABASE_URL and DIRECT_URL in .env at this database (localhost:5432) and create the schema with
 #   `pnpm db:migrate`.
+# - Redis (optional): `pnpm docker:redis` starts only redis (redis profile). Set REDIS_URL in .env to
+#   redis://localhost:6379 to use it; without REDIS_URL the app runs without Redis.
 # - Service: `pnpm docker:up` builds the production image (Dockerfile) and starts only app (app profile). app does not
 #   depend on db and uses DATABASE_URL from .env unchanged, so it must be reachable from inside the container (such as
 #   the Supabase pooler); localhost there is the container itself. The image does not apply migrations, so run
@@ -31,6 +33,22 @@ services:
       timeout: 5s
       retries: 20
 
+  redis:
+    profiles: [redis]
+    image: redis:8-alpine
+    # The memory limit and eviction policy the app's Redis should run with (AGENTS.md, Redis): when full, drop the
+    # least recently used keys (any key, approximately) to make room instead of refusing writes.
+    command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+
   app:
     profiles: [app]
     build:
@@ -45,6 +63,7 @@ services:
 
 volumes:
   db-data:
+  redis-data:
 
 secrets:
   build-env:

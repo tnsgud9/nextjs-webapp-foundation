@@ -98,6 +98,41 @@ describe("data/ (data access layer)", () => {
   });
 });
 
+describe("Redis (through the data access layer)", () => {
+  const REDIS_CLIENT = 'import { getRedis } from "@/lib/redis/client";\nexport const x = getRedis;\n';
+  const REDIS_PACKAGE = 'import { createClient } from "redis";\nexport const x = createClient;\n';
+  const MODEL = 'import { defineRedisModel } from "@/lib/redis/model";\nexport const x = defineRedisModel;\n';
+
+  it.each(["components/probe.ts", "app/probe/route.ts", "lib/probe.ts", "lib/server/probe.ts", "redis/models/probe.ts"])(
+    "%s may not use the Redis client or the Redis package",
+    async (file) => {
+      expect(await violations(file, REDIS_CLIENT)).toBeGreaterThan(0);
+      expect(await violations(file, REDIS_PACKAGE)).toBeGreaterThan(0);
+      expect(await violations(file, 'export const x = () => import("@/lib/redis/client");\n')).toBeGreaterThan(0);
+      expect(await violations(file, 'export const x = () => import("@redis/client");\n')).toBeGreaterThan(0);
+    },
+  );
+
+  it("data/ uses the Redis client and Redis models beside the database, but not the package", async () => {
+    expect(await violations("data/probe.ts", REDIS_CLIENT)).toBe(0);
+    expect(await violations("data/probe.ts", 'export const x = () => import("@/lib/redis/client");\n')).toBe(0);
+    expect(await violations("data/probe.ts", 'import { ImportProgressModel } from "@/redis/models/import-progress";\nexport const x = ImportProgressModel;\n')).toBe(0);
+    expect(await violations("data/probe.ts", QUERY)).toBe(0);
+    expect(await violations("data/probe.ts", REDIS_PACKAGE)).toBeGreaterThan(0);
+    expect(await violations("data/probe.ts", 'export const x = () => import("@redis/client");\n')).toBeGreaterThan(0);
+  });
+
+  it("lib/redis/ holds the package; model files define Redis models without the client", async () => {
+    expect(await violations("lib/redis/client.ts", REDIS_PACKAGE)).toBe(0);
+    expect(await violations("redis/models/probe.ts", MODEL)).toBe(0);
+  });
+
+  it("only the test Redis helpers use the package outside lib/redis/", async () => {
+    expect(await violations("test-utils/shared/test-redis.ts", REDIS_PACKAGE)).toBe(0);
+    expect(await violations("test-utils/vitest/probe.ts", REDIS_PACKAGE)).toBeGreaterThan(0);
+  });
+});
+
 describe("entry points", () => {
   const HANDLERS = 'import { withActionErrorHandler, withRouteErrorHandler } from "@/lib/server/error-handlers";\n';
   const ACTION = `"use server";\n${HANDLERS}export const save = withActionErrorHandler(async () => ({ ok: true as const }));\n`;

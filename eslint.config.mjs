@@ -26,6 +26,18 @@ const RESTRICTED = {
     source: String.raw`\x2Fenv\.server$`,
     message: "Read server secrets only in data/ and server-only modules in lib/.",
   },
+  // Redis, like the database, is reached only through the data access layer (data/).
+  redisClient: {
+    group: ["**/redis/client"],
+    source: String.raw`\x2Fredis\x2Fclient$`,
+    message:
+      "Use the Redis client only in the data access layer (data/), with a Redis model from redis/models/. Call a data/ function.",
+  },
+  redisPackage: {
+    regex: "^(redis|@redis/.+)$",
+    source: String.raw`^(redis|@redis\x2F.+)$`,
+    message: "Import the Redis package only in lib/redis/ (and the test Redis helpers). Call a data/ function.",
+  },
 };
 
 // Entry points: every exported Server Action and Route Handler goes through its error handler, so the
@@ -65,8 +77,8 @@ function restrictImports(...entries) {
     "@typescript-eslint/no-restricted-imports": [
       "error",
       {
-        patterns: entries.map(({ group, allowTypeImports, message }) => ({
-          group,
+        patterns: entries.map(({ group, regex, allowTypeImports, message }) => ({
+          ...(group ? { group } : { regex }),
           allowTypeImports,
           message,
         })),
@@ -153,23 +165,42 @@ const eslintConfig = defineConfig([
       "react-hooks/set-state-in-effect": "off",
     },
   },
-  // Server resource boundary: the database and server secrets are reached only through the data
-  // access layer (data/). A later block overrides an earlier one for the same rule, so later blocks
-  // cover narrower paths and allow more. JS files are included too (allowJs in tsconfig).
+  // Server resource boundary: the database, Redis, and server secrets are reached only through the
+  // data access layer (data/). A later block overrides an earlier one for the
+  // same rule, so later blocks cover narrower paths and allow more. JS files are included too
+  // (allowJs in tsconfig).
   {
     name: "server boundary: default",
     files: ALL_SOURCES,
-    rules: restrictImports(RESTRICTED.db, RESTRICTED.prismaValues, RESTRICTED.serverEnv),
+    rules: restrictImports(
+      RESTRICTED.db,
+      RESTRICTED.prismaValues,
+      RESTRICTED.serverEnv,
+      RESTRICTED.redisClient,
+      RESTRICTED.redisPackage,
+    ),
   },
   {
     name: "server boundary: lib",
     files: ["lib/**"],
-    rules: restrictImports(RESTRICTED.db, RESTRICTED.prismaValues),
+    rules: restrictImports(RESTRICTED.db, RESTRICTED.prismaValues, RESTRICTED.redisClient, RESTRICTED.redisPackage),
   },
   {
     name: "server boundary: lib/server",
     files: ["lib/server/**"],
-    rules: restrictImports(RESTRICTED.db),
+    rules: restrictImports(RESTRICTED.db, RESTRICTED.redisClient, RESTRICTED.redisPackage),
+  },
+  {
+    // The Redis infrastructure: the client and defineRedisModel().
+    name: "server boundary: lib/redis",
+    files: ["lib/redis/**"],
+    rules: restrictImports(RESTRICTED.db, RESTRICTED.prismaValues),
+  },
+  {
+    // The test Redis helpers talk to the test Redis directly, never through the app's client.
+    name: "server boundary: test Redis helpers",
+    files: ["test-utils/shared/test-redis.ts", "test-utils/shared/test-redis.vitest.test.ts"],
+    rules: restrictImports(RESTRICTED.db, RESTRICTED.prismaValues, RESTRICTED.serverEnv, RESTRICTED.redisClient),
   },
   {
     name: "server boundary: lib/db",
@@ -186,9 +217,9 @@ const eslintConfig = defineConfig([
     name: "server boundary: data access layer",
     files: ["data/**"],
     rules: {
-      "@typescript-eslint/no-restricted-imports": "off",
+      ...restrictImports(RESTRICTED.redisPackage),
       "no-restricted-syntax": [
-        "error",
+        ...restrictImports(RESTRICTED.redisPackage)["no-restricted-syntax"],
         {
           selector: `:matches(ExportNamedDeclaration, ExportAllDeclaration)[source.value=/${RESTRICTED.db.source}/]`,
           message: RESTRICTED.db.message,
@@ -201,7 +232,6 @@ const eslintConfig = defineConfig([
           selector: `Identifier[name="db"]:not(.object):not(ImportSpecifier > Identifier)`,
           message: RESTRICTED.db.message,
         },
-        ...ACTION_EXPORTS,
       ],
     },
   },
@@ -211,7 +241,13 @@ const eslintConfig = defineConfig([
     files: ["app/**/route.{ts,tsx,js,jsx,mjs,cjs,mts,cts}"],
     rules: {
       "no-restricted-syntax": [
-        ...restrictImports(RESTRICTED.db, RESTRICTED.prismaValues, RESTRICTED.serverEnv)["no-restricted-syntax"],
+        ...restrictImports(
+          RESTRICTED.db,
+          RESTRICTED.prismaValues,
+          RESTRICTED.serverEnv,
+          RESTRICTED.redisClient,
+          RESTRICTED.redisPackage,
+        )["no-restricted-syntax"],
         ...ROUTE_EXPORTS,
       ],
     },

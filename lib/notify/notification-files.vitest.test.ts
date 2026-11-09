@@ -1,31 +1,14 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { definitionFileViolations, definitionFiles } from "@/test-utils/vitest/definition-files";
 
 /**
  * Checks the files in `notifications/`, one per kind of notification. Until the first kind is added,
  * only the checks on sample files below run.
  */
 const DIR = "notifications";
-
-const pascalCase = (kebab: string) => kebab.replace(/(^|-)([a-z0-9])/g, (_, __, char: string) => char.toUpperCase());
-
-/** What breaks the one-kind-per-file layout in a file named `file` with this source. */
-function violations(file: string, source: string): string[] {
-  const name = file.replace(/\.ts$/, "");
-  const found: string[] = [];
-  if (!/^[a-z0-9]+(-[a-z0-9]+)*\.ts$/.test(file)) found.push("the file name must be kebab-case .ts");
-  if (!/^import "server-only";/.test(source.trimStart())) found.push('the file must start with import "server-only"');
-  const kinds = [...source.matchAll(/export const (\w+) = defineNotification(?:<[^>]*>)?\(\s*"([^"]*)"/g)];
-  if ((source.match(/defineNotification\(|defineNotification</g) ?? []).length !== 1 || kinds.length !== 1) {
-    found.push("the file must export exactly one kind as `export const Name = defineNotification(\"name\", …)`");
-  } else {
-    const [, exported, kindName] = kinds[0];
-    if (kindName !== name) found.push(`the kind name must match the file name: "${name}"`);
-    if (exported !== pascalCase(name)) found.push(`the export must be named ${pascalCase(name)}`);
-  }
-  return found;
-}
+const violations = (file: string, source: string) => definitionFileViolations(file, source, { define: "defineNotification" });
 
 const VALID = `import "server-only";
 import { defineNotification } from "@/lib/notify";
@@ -41,7 +24,7 @@ export const ImportFinished = defineNotification("import-finished", {
 `;
 
 describe("notification kind files", () => {
-  const files = existsSync(DIR) ? readdirSync(DIR).filter((file) => file.endsWith(".ts") && !file.includes(".test.")) : [];
+  const files = definitionFiles(DIR);
 
   if (files.length > 0) {
     it.each(files)("%s holds one kind named after the file", (file) => {

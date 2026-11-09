@@ -31,6 +31,12 @@ const serverEnvSchema = z.object({
    * anyone holding it can post to the channel. Unset, notifications are skipped.
    */
   NOTIFY_SLACK_WEBHOOK_URL: z.url({ protocol: /^https$/ }).optional(),
+  /**
+   * Redis (`lib/redis/client.ts`), the app's cache: data it can rebuild from its source or afford to lose.
+   * `rediss://` for TLS; a password and database number go in the URL, so it is a secret. Optional: unset,
+   * `getRedis()` resolves to `undefined` and each `data/` function decides what to do without Redis.
+   */
+  REDIS_URL: z.url({ protocol: /^rediss?$/ }).optional(),
 });
 
 const parsed = serverEnvSchema.safeParse({
@@ -40,6 +46,7 @@ const parsed = serverEnvSchema.safeParse({
   SERVICE_NAME: process.env.SERVICE_NAME || undefined,
   APP_ENV: process.env.APP_ENV || undefined,
   NOTIFY_SLACK_WEBHOOK_URL: process.env.NOTIFY_SLACK_WEBHOOK_URL || undefined,
+  REDIS_URL: process.env.REDIS_URL || undefined,
 });
 
 if (!parsed.success) {
@@ -54,4 +61,5 @@ export const serverEnv = {
   serviceName: parsed.data.SERVICE_NAME ?? packageName,
   environment: parsed.data.APP_ENV ?? process.env.NODE_ENV ?? "development",
   notifySlackWebhookUrl: parsed.data.NOTIFY_SLACK_WEBHOOK_URL,
+  redisUrl: parsed.data.REDIS_URL,
 } as const;

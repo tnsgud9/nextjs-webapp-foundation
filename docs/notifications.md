@@ -42,7 +42,7 @@ A kind is defined once with `defineNotification(name, { topic, render })`, so ea
 | `render` | Turns the kind's data into a message |
 
 - Each kind lives in its own file in `notifications/`, as the [Notifications](../AGENTS.md#notifications) rules set out, so a test can find and check every kind. The folder holds no kinds yet.
-- `lib/notify/notification-files.vitest.test.ts` checks each file there: a kebab-case file name, `import "server-only"` first, exactly one exported kind, a kind name equal to the file name, and the PascalCase export. It also checks the same rules on sample sources, the only checks that run while the folder holds no kinds.
+- `lib/notify/notification-files.vitest.test.ts` checks each file there with the shared checker in `test-utils/vitest/definition-files.ts`, which also checks [Redis models](redis.md#redis-models): a kebab-case file name, `import "server-only"` first, exactly one exported kind, a kind name equal to the file name, and the PascalCase export. It also checks the same rules on sample sources, the only checks that run while the folder holds no kinds.
 - `defineNotification()` throws when the name or topic is not kebab-case, so a bad kind fails when its module loads.
 - Each field of a kind's data (`NotificationData`) is a string, number, boolean, null, or undefined (an optional field), or a list of strings, numbers, or booleans, with no null in a list. The type checker rejects any other field, such as a `Date`, a `Decimal`, a relation, or a nested object, so callers convert such values first. A record whose fields are all primitives still passes, so keeping Prisma records out is left to the [Notifications](../AGENTS.md#notifications) rules, not the type checker.
 

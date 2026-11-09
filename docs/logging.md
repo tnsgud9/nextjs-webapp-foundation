@@ -21,7 +21,7 @@ flowchart TD
 ```
 
 - Only unexpected errors are logged, each exactly once. Expected failures are Problems the client already receives, so logging them would only add noise.
-- Some lines come from outside this flow: a warning when a Supabase Auth call runs past its time limit (see [Auth](auth.md#time-limit)), with `code.function.name` and `supabase.auth.timeout_ms`, and the error and warning lines of a notification that failed or was skipped (see [Notifications](notifications.md#notification-log-lines)).
+- Some lines come from outside this flow: a warning when a Supabase Auth call runs past its time limit (see [Auth](auth.md#time-limit)), with `code.function.name` and `supabase.auth.timeout_ms`, the error and warning lines of a notification that failed or was skipped (see [Notifications](notifications.md#notification-log-lines)), and a "Redis connection error" warning with only `error.type`, because the error message can carry the Redis URL (see [Redis](redis.md#the-client)).
 - Route Handler errors never reach the request error hook, because the error handler catches them first; that is why two paths write the same kind of line.
 - The app never sends lines to a log store itself, so a slow or missing store cannot slow a request, and changing stores needs no code change.
 
@@ -83,6 +83,7 @@ The pages in `app/playwright/` are built only for Playwright, some of them to fa
 | `lib/server/error-handlers.ts` | Passes the method and request ID to the error mapping |
 | `proxy.ts` | Sets the request ID |
 | `lib/supabase/auth-deadline.ts` | Logs a Supabase Auth time-out |
+| `lib/redis/client.ts` | Logs a Redis connection error |
 | `config/env.server.ts` | `SERVICE_NAME` and `APP_ENV` |
 | `test-utils/vitest/setup.ts` | `loggedErrors()` and `loggedWarnings()` read the lines a test printed |
 

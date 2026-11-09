@@ -11,11 +11,13 @@ flowchart TD
   Push["Push to main or pull request"] --> Check["Check job: Prisma schema check, audit, lint, typecheck, Vitest, build"]
   Push --> PW["Playwright job: install Chromium, run Playwright, upload traces on failure"]
   Push --> Docker["Docker job: build the image with the pinned Node version, start it, wait for its health check"]
-  TestDB[("Test Postgres service")] --> Check
+  TestDB[("Test Postgres and Redis services")] --> Check
   TestDB --> PW
 ```
 
-- The Docker job starts the image it built, with no environment, and asks `/api/health` up to 30 times, one second apart, giving each request at most 2 seconds. If none succeeds, it prints the container's logs and fails
+Both test jobs start the same Postgres and Redis images as `docker-compose.test.yaml`, as service containers at the same addresses, so the tests need no CI-only settings. Service containers take no command, so once the Redis service is up, each job sets it to what `docker-compose.test.yaml` gives the test Redis: the same memory limit, `allkeys-lru`, and persistence off.
+
+- The Docker job starts the image it built, with no environment, and asks `/api/health` up to 30 times, one second apart, giving each request at most 2 seconds. If none succeeds, it prints the container's logs and fails. Playwright tests `next start`, not the standalone server the image ships, so without this job that server would first start in a deployment.
 - CI never reaches the Supabase project or its database. Whether production has every variable is a deployment concern, not a CI one.
 - Make the jobs required checks in branch protection, so the server boundary and its tests cannot be merged around.
 - `pnpm build` type-checks app code only (`tsconfig.build.json`), so changes to tests or the docs tooling never break a deploy. `pnpm typecheck` covers everything.
@@ -44,7 +46,7 @@ Some packages must match each other, so they move in one update:
 ## Environment variables
 
 - `config/env.ts` (public) and `config/env.server.ts` (server-only) parse the variables with zod when the module loads, so a bad value fails at start-up, not deep in a request.
-- An empty value (`FOO=`) counts as unset, so optional integrations stay off until they are filled in.
+- An empty value (`FOO=`) counts as unset, so optional integrations stay off until they are filled in. `REDIS_URL` is one: without it the app runs without Redis (see [Redis](redis.md)).
 - Next.js replaces each `NEXT_PUBLIC_*` with its value at build time. Each one is written out in full in `config/env.ts`, and values derived from them, such as whether Supabase is on or the showcase is open, are fixed per build.
 - `.env.example` lists every variable with its purpose.
 
@@ -86,14 +88,17 @@ flowchart LR
 | Use | Command | Notes |
 | --- | --- | --- |
 | Development database | `pnpm docker:db` | Listens on `127.0.0.1:5432` only; data persists in the `db-data` volume. Point `.env` at it as in `.env.example`, create the schema with `pnpm db:migrate`, and run the app on the host with `pnpm dev` |
+| Development Redis, optional | `pnpm docker:redis` | Listens on `127.0.0.1:6379` only, with a 256 MB memory limit and `allkeys-lru`; data persists in the `redis-data` volume. Started only on request (Compose profile `redis`); set `REDIS_URL` in `.env` to use it |
 | Production image as a service | `pnpm docker:up` | Listens on `127.0.0.1:3000` only. Needs `.env`. Reads `DATABASE_URL` unchanged, so it must be reachable from inside a container; `localhost` there is the container itself. Apply migrations first with `pnpm db:deploy`. Stopping it allows 30 seconds (`stop_grace_period`) before the container is killed |
-| Test database | `pnpm test:db:up` / `test:db:down` | Port 5433, in-memory data, its own Compose project |
+| Test database and Redis | `pnpm test:db:up` / `test:db:down` | Postgres on port 5433 and Redis on port 6380 (64 MB memory limit, `allkeys-lru`), data kept in memory only, their own Compose project |
 
-The development project is named after the folder and the test project after `name` in `package.json`, so separate projects never share containers or volumes.
+`pnpm docker:down` stops every service of the development project, Redis included. The development project is named after the folder and the test project after `name` in `package.json`, so separate projects never share containers or volumes.
+
+Compose runs no production Redis. The app does not configure the Redis it connects to, so whoever deploys one gives it the settings the [Redis](../AGENTS.md#redis) rule asks for (see [Redis as a cache](redis.md#redis-as-a-cache)).
 
 ## Multiple instances
 
-The app can run as several instances behind a load balancer without any extra service. What each deployment must do is in the [Commands](../AGENTS.md#commands) rule on multiple instances; this table gives how each part works and why.
+The app can run as several instances behind a load balancer without any extra service; Redis is optional. What each deployment must do is in the [Commands](../AGENTS.md#commands) rule on multiple instances; this table gives how each part works and why.
 
 | Concern | How it works | Why |
 | --- | --- | --- |
@@ -101,7 +106,7 @@ The app can run as several instances behind a load balancer without any extra se
 | Server Action key | Next.js generates a new key per build and builds it in, so instances started from one image already share it. `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` in `build-env` is needed only when instances run separate builds of the same version | The key salts each action's ID and encrypts the values an action closes over, so a build with another key neither finds nor decrypts the actions of this one |
 | Database connections | Every instance has its own pool of `DATABASE_POOL_MAX` connections | The pooler counts all of them against its client limit; see [Connections](data-layer.md#connections) |
 | Shutdown | The standalone server handles SIGTERM and SIGINT itself: it closes the server, lets in-flight requests and pending `after()` callbacks finish, then exits. Compose gives the app container 30 seconds | A platform that kills the process sooner loses that work, such as [notifications](notifications.md) still being sent |
-| Shared state | Nothing instances must share lives in process memory. There is no rate limiting yet, and pages render dynamically for the per-request CSP nonce, so there is no page cache to keep in step | There is no shared store or shared cache handler. The [rate limiting](../AGENTS.md#security-boundary-client--server) rule needs a shared store once the first limit is added; a cache handler is the Next.js extension point if cached pages are added |
+| Shared state | Nothing instances must share lives in process memory. There is no rate limiting yet, and pages render dynamically for the per-request CSP nonce, so there is no page cache to keep in step | The optional [Redis](redis.md) is a store every instance can share, but nothing uses it yet, and there is no shared cache handler. The [rate limiting](../AGENTS.md#security-boundary-client--server) rule needs a shared store once the first limit is added; a cache handler is the Next.js extension point if cached pages are added |
 
 ## Key files
 
@@ -120,5 +125,5 @@ The app can run as several instances behind a load balancer without any extra se
 
 ## Related rules
 
-- [Commands](../AGENTS.md#commands): pnpm, release age, dependency updates, verification, Node pinning, CI and Docker files, multiple instances
+- [Commands](../AGENTS.md#commands): pnpm, release age, dependency updates, verification, Node pinning, CI and Docker files, the Postgres and Redis image tags, multiple instances
 - [Environment variables](../AGENTS.md#environment-variables): the env modules and their build-time exceptions, public variables, `.env.example`

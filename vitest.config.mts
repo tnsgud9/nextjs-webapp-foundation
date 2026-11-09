@@ -2,15 +2,22 @@ import { configDefaults, defineConfig } from "vitest/config";
 
 const GUARD_MODULE = "\0next-module-guard";
 
-/** Tests that need a real Postgres. Only data/ queries the database, so this is data/ tests plus the test-utils self-checks. */
-const DB_TESTS = ["data/**/*.vitest.test.ts", "test-utils/**/*.vitest.test.ts"];
+/**
+ * Tests that need the real test services (Postgres, Redis). Only data/ uses the database and Redis, so this is data/
+ * tests, the Redis client's own test, and the test-utils self-checks.
+ */
+const DB_TESTS = [
+  "data/**/*.vitest.test.ts",
+  "lib/redis/client.vitest.test.ts",
+  "test-utils/**/*.vitest.test.ts",
+];
 
 /**
  * Vitest config. Runs `*.vitest.test.ts`, which sit next to the code they cover. Unrelated to the Next.js build.
  *
  * - `unit`: tests without external dependencies, run file by file in parallel.
- * - `db`: tests against the test database (docker-compose.test.yaml). Tables are emptied before each test,
- *   so files run one at a time. If the database is unreachable they fail instead of being skipped.
+ * - `db`: tests against the test database and test Redis (docker-compose.test.yaml). Tables and Redis are emptied
+ *   before each test, so files run one at a time. If either is unreachable they fail instead of being skipped.
  *
  * `server-only` / `client-only` are guards only the Next.js bundler understands; importing them in Node fails.
  * Tests replace them with empty modules, and the Next.js build enforces the guards.

@@ -18,9 +18,13 @@ flowchart TD
   Data --> DB["Prisma Client"]
   DB --> Postgres[("Postgres")]
   Auth --> SupabaseAuth["Supabase Auth"]
+  Data -->|optional| RedisClient["Redis client"]
+  RedisClient --> Redis[("Redis")]
 ```
 
-Server Components, Route Handlers, and Server Actions are the **entry points**. Each one validates its input, calls the data access layer, and returns only what the UI needs. Nothing above the data access layer queries the database. Only the data access layer decides who may see what, so a new entry point cannot skip authorization by accident.
+Server Components, Route Handlers, and Server Actions are the **entry points**. Each one validates its input, calls the data access layer, and returns only what the UI needs. Nothing above the data access layer uses the database or Redis. Only the data access layer decides who may see what, so a new entry point cannot skip authorization by accident.
+
+The data access layer covers Redis as well as the database (see [Security boundary](../AGENTS.md#security-boundary-client--server)). Redis is optional and nothing uses it yet; see [Redis](redis.md).
 
 Lint and tests catch the boundary breaks a machine can see. Whether a data access function authorizes the right resource, or a response holds more than the UI needs, takes reading the code: the `endpoint-review` skill, run by the read-only `endpoint-reviewer` subagent, traces each entry point to the database and back against the audit checklist.
 
@@ -29,9 +33,10 @@ Lint and tests catch the boundary breaks a machine can see. Whether a data acces
 | Client Components | `components/`, `hooks/`, `lib/ky.ts` | Call Route Handlers through the HTTP client and Server Actions directly |
 | Proxy | `proxy.ts` | Sets the per-request CSP nonce and request ID, and refreshes the session; protects nothing |
 | Input validation | `lib/server/validation.ts` | Checks every external input, including page route params, with a strict zod schema |
-| Data access layer | `data/` | Identifies the requester, authorizes access to the resource, queries, and returns a DTO |
+| Data access layer | `data/` | Identifies the requester, authorizes access to the resource, queries the database or Redis, and returns a DTO |
 | Identity | `lib/auth.ts` | Returns the verified requester. See [Auth](auth.md) |
 | Prisma Client | `lib/db.ts` | The single database client. See [Data layer](data-layer.md) |
+| Redis client | `lib/redis/client.ts` | The single Redis client, or none when `REDIS_URL` is unset. See [Redis](redis.md) |
 
 ## Server/client boundary
 
@@ -53,11 +58,11 @@ Solid arrows are allowed imports; dashed arrows fail the build.
 
 | Kind | Guard at the top of the module | Examples |
 | --- | --- | --- |
-| Server-only code | `import "server-only"` | `data/`, `lib/auth.ts`, `lib/db.ts`, `lib/server/`, `lib/supabase/server.ts` |
+| Server-only code | `import "server-only"` | `data/`, `lib/auth.ts`, `lib/db.ts`, `lib/redis/`, `lib/server/`, `lib/supabase/server.ts` |
 | Shared code | none, and it imports no guarded module | `lib/problem.ts`, `lib/csp.ts`, `config/env.ts` |
 | Client-only code | `import "client-only"` | `lib/sentry/client.ts`, modules that need browser-only APIs |
 
-ESLint adds the import rules a guard cannot express: who may import the Prisma Client, Prisma values, and server secrets. Its rules match the end of the import path, also catch dynamic `import()` / `require()`, and are themselves tested in `eslint.config.vitest.test.ts`. A separate rule limits where the notify module is imported, so only entry points send notifications (see [Notifications](notifications.md#from-the-caller-to-the-chat-service)).
+ESLint adds the import rules a guard cannot express: who may import the Prisma Client, Prisma values, server secrets, the Redis client (only `data/`, like the Prisma Client), and the `redis` package (only `lib/redis/` and the test Redis helpers). Its rules match the end of the import path, also catch dynamic `import()` / `require()`, and are themselves tested in `eslint.config.vitest.test.ts`. A separate rule limits where the notify module is imported, so only entry points send notifications (see [Notifications](notifications.md#from-the-caller-to-the-chat-service)).
 
 ESLint also checks how Server Actions and Route Handlers are exported, so neither can skip the error handler and its Problem mapping and reporting ([Server endpoints](../AGENTS.md#server-endpoints) has the rule; see [Errors](errors.md#server-pieces) for the handlers):
 - An export the rule cannot see through, such as an alias or a re-export, is rejected rather than trusted.
@@ -87,6 +92,7 @@ ESLint also checks how Server Actions and Route Handlers are exported, so neithe
 | `data/` | Data access layer |
 | `lib/auth.ts` | Requester identity |
 | `lib/db.ts` | Prisma Client |
+| `lib/redis/client.ts` | Redis client |
 | `lib/server/` | Input validation, error mapping, error handlers, server logs |
 | `lib/problem.ts` | Error contract shared by server and client |
 | `lib/ky.ts`, `lib/query-client.ts`, `components/query-provider.tsx` | HTTP client and TanStack Query |
@@ -103,6 +109,7 @@ ESLint also checks how Server Actions and Route Handlers are exported, so neithe
 
 - [Server / client boundary](../AGENTS.md#server--client-boundary): guards, Prisma imports
 - [Security boundary](../AGENTS.md#security-boundary-client--server): data access layer, identity, lint boundary, return values, mass assignment, rate limiting, audit checklist
+- [Redis](../AGENTS.md#redis): Redis only through the data access layer
 - [Server endpoints](../AGENTS.md#server-endpoints): error handler on every exported Server Action and Route Handler
 - [Data fetching](../AGENTS.md#data-fetching): HTTP client, Server Component reads
 - [UI](../AGENTS.md#ui): shadcn source, derived components, styles, showcase

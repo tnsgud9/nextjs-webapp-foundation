@@ -1,6 +1,6 @@
 # Data layer
 
-The data access layer (`data/`) is the only code that queries the database. Prisma connects as a role that bypasses RLS, so each function in it is where authorization actually happens.
+The data access layer (`data/`) is the only code that uses the database and Redis. Prisma connects as a role that bypasses RLS, so each function in it is where authorization actually happens.
 No models, migrations, or data access functions exist yet; this page describes the shape they follow.
 
 ## A data access function
@@ -18,6 +18,7 @@ flowchart TD
 - The requester comes from `lib/auth.ts` (see [Auth](auth.md)) because anything the client sends can be forged.
 - Arguments are built field by field and results are trimmed to a DTO, because whatever leaves the server reaches the browser.
 - A page that gets a 404 or 403 `ProblemError` catches it and calls `notFound()`. No helper does this; uncaught, it shows the error page.
+- The same steps apply when a function reads or writes Redis, such as a cache in front of a query, and one function may use both stores. A cached read authorizes after the read instead of before it; see [Redis](redis.md#redis-in-a-data-access-function).
 
 ## Connections
 
@@ -84,4 +85,5 @@ Prisma does not rely on those grants, so server code is unaffected. To expose a 
 
 - [Security boundary](../AGENTS.md#security-boundary-client--server): data access layer, identity, return values, mass assignment
 - [Database](../AGENTS.md#database): models, migrations, Data API exposure, primary keys, users, conventions
+- [Redis](../AGENTS.md#redis): Redis through the data access layer, with the same checks as the database
 - [Commands](../AGENTS.md#commands): multiple instances, for the pool size
