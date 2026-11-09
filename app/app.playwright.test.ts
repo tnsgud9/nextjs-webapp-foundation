@@ -1,5 +1,5 @@
 import { type APIRequestContext, expect, test } from "@playwright/test";
-import { PLAYWRIGHT_APP_NAME } from "@/test-utils/playwright/app";
+import { TEST_ENV } from "@/test-utils/shared/test-env";
 import { captureSentryEvents } from "@/test-utils/playwright/sentry";
 import { SESSION_COOKIE_NAME, sessionCookieHeader } from "@/test-utils/playwright/supabase-auth";
 
@@ -119,7 +119,7 @@ test.describe("pages", () => {
     await page.goto("/");
     await expect(page.getByRole("heading", { name: "Ready to start" })).toBeVisible();
     await expect(page.locator("html")).toHaveAttribute("lang", "en");
-    await expect(page).toHaveTitle(PLAYWRIGHT_APP_NAME);
+    await expect(page).toHaveTitle(TEST_ENV.NEXT_PUBLIC_APP_NAME);
     await expect(page.locator('link[rel="icon"]').first()).toHaveAttribute("href", /\/icon\.svg/);
   });
 

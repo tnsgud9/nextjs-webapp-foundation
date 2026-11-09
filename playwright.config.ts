@@ -1,7 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
-import { PLAYWRIGHT_APP_NAME } from "./test-utils/playwright/app";
+import { playwrightServerEnv } from "./test-utils/playwright/server-env";
 import { FAKE_SUPABASE_PORT, FAKE_SUPABASE_URL } from "./test-utils/playwright/supabase-auth";
-import { fakeSupabaseEnv } from "./test-utils/shared/supabase-auth";
 import { TEST_DATABASE_URL, assertLocalDatabase } from "./test-utils/shared/test-database";
 import { TEST_REDIS_URL, assertLocalRedis } from "./test-utils/shared/test-redis";
 
@@ -15,9 +14,10 @@ assertLocalRedis(TEST_REDIS_URL);
  * Builds and starts a production build with `PLAYWRIGHT=1`, then tests it in a real browser (Chromium).
  *
  * - Test pages in `app/playwright/**` become routes only in `PLAYWRIGHT=1` builds (next.config.ts).
+ * - The app server gets every variable from `.env.test` (test-utils/playwright/server-env.ts), so nothing in .env
+ *   reaches it: outside services are off, and the database and Redis are the test services (the database migrated
+ *   before the run).
  * - Supabase points to the fake Auth server (test-utils/shared/supabase-auth.ts), started before the app.
- * - The database and Redis are pinned to the test services (the database migrated before the run); the ones in .env
- *   are never reached.
  * - The Sentry DSN is an unreachable address; tests intercept the browser's requests instead.
  * - The build goes to `.next`, overwriting a normal build.
  */
@@ -40,14 +40,7 @@ export default defineConfig({
       command: `pnpm build && pnpm start --port ${PORT}`,
       url: `http://localhost:${PORT}/api/health`,
       timeout: 300_000,
-      env: {
-        PLAYWRIGHT: "1",
-        NEXT_PUBLIC_APP_NAME: PLAYWRIGHT_APP_NAME,
-        NEXT_PUBLIC_SENTRY_DSN: "http://public@localhost:9/1",
-        DATABASE_URL: TEST_DATABASE_URL,
-        REDIS_URL: TEST_REDIS_URL,
-        ...fakeSupabaseEnv(FAKE_SUPABASE_URL),
-      },
+      env: playwrightServerEnv(),
     },
   ],
 });

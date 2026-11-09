@@ -203,6 +203,12 @@ const eslintConfig = defineConfig([
     rules: restrictImports(RESTRICTED.db, RESTRICTED.prismaValues, RESTRICTED.serverEnv, RESTRICTED.redisClient),
   },
   {
+    // The server env module's own test loads it with test values; it reads no real secret.
+    name: "server boundary: server env test",
+    files: ["config/env.server.vitest.test.ts"],
+    rules: restrictImports(RESTRICTED.db, RESTRICTED.prismaValues, RESTRICTED.redisClient, RESTRICTED.redisPackage),
+  },
+  {
     name: "server boundary: lib/db",
     files: ["lib/db.ts"],
     rules: {

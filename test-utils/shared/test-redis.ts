@@ -1,10 +1,11 @@
 import { createClient } from "redis";
+import { TEST_ENV } from "./test-env";
 
 /**
- * The test Redis. Defaults to the Redis in docker-compose.test.yaml; CI starts a service container at
- * the same address. Set `TEST_REDIS_URL` to use another one. The app's `REDIS_URL` is never reused.
+ * The test Redis: `REDIS_URL` in `.env.test`, the Redis in docker-compose.test.yaml (CI starts a service container
+ * at the same address). The one in .env is never used.
  */
-export const TEST_REDIS_URL = process.env.TEST_REDIS_URL || "redis://localhost:6380";
+export const TEST_REDIS_URL = TEST_ENV.REDIS_URL;
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
@@ -12,7 +13,7 @@ const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 export function assertLocalRedis(url: string): void {
   const { hostname } = new URL(url);
   if (!LOCAL_HOSTS.has(hostname)) {
-    throw new Error(`Refusing to use a non-local test Redis (${hostname}). TEST_REDIS_URL must point to localhost.`);
+    throw new Error(`Refusing to use a non-local test Redis (${hostname}). REDIS_URL in .env.test must point to localhost.`);
   }
 }
 

@@ -31,6 +31,14 @@ flowchart TD
 
 The fake server's signing key comes from a fixed seed, so the server and the tests agree on it without a key stored in the repository.
 
+## The test environment
+
+Every test runs with the variables in the committed `.env.test`, never those in `.env`, so a developer's own secrets and services never reach a test (see [Commands](../AGENTS.md#commands)). Vitest sets them for every test in its first setup file (`test-utils/vitest/env.ts`), so the config itself loads no project module; Playwright passes them, with `PLAYWRIGHT=1` and the fake Auth server's address, to the app server it builds and starts.
+
+- `next build` and `next start` load `.env` (and `.env.local` or `.env.production*` when present), but never replace a variable that is already set, an empty one included. `.env.test` lists every variable in `.env.example`, so those files fill in none of them; only a variable missing from `.env.example` could still reach the Playwright server, which is one more reason every variable goes there.
+- An empty value means unset, so notifications and the Sentry source map upload stay off. The Sentry DSN is an address nothing listens on.
+- Its `DATABASE_URL` and `REDIS_URL` are the test services (ports 5433 and 6380), and the only addresses the test helpers use.
+
 ## Test database setup
 
 ```mermaid
@@ -47,7 +55,7 @@ flowchart TD
   Diff -->|yes| Run["Run tests; the db project empties every table and Redis before each test"]
 ```
 
-- The tests empty every table and the whole Redis database, so the localhost checks keep them away from any shared database or Redis. `TEST_DATABASE_URL` and `TEST_REDIS_URL` can override the default addresses, but only with other localhost addresses.
+- The tests empty every table and the whole Redis database, so the localhost checks keep them away from any shared database or Redis. Both addresses come only from `.env.test`, so the ones in `.env` are never reached.
 - A down database or Redis fails the run instead of skipping tests, so a green run always means the data access layer was tested. Playwright goes through the same setup and starts the app with the test Redis, so it needs the test Redis too.
 - Only the data access layer touches the database and Redis, so tests above it mock the data access functions they call.
 - When many tests build the same records, add a factory per model under `test-utils/`.
@@ -55,7 +63,7 @@ flowchart TD
 
 ## Playwright
 
-- It starts the fake Auth server, then builds and starts the app with `PLAYWRIGHT=1`, pointing it at the test database, the test Redis, and the fake server.
+- It starts the fake Auth server, then builds and starts the app with the [test environment](#the-test-environment), `PLAYWRIGHT=1`, and the fake server's address. The database and Redis addresses must be on localhost before anything starts.
 - Pages built only for Playwright, some of which fail on purpose, live in `app/playwright/` as `page.playwright.tsx`. Only a `PLAYWRIGHT=1` build treats them as pages, so they never ship.
 - Playwright overwrites `.next`, so rebuild with `pnpm build` before deploying from the same folder.
 
@@ -66,16 +74,18 @@ flowchart TD
 | Helper | Role |
 | --- | --- |
 | `shared/supabase-auth.ts` | Fake Auth server and session cookies: valid, anonymous, non-user role, forged, expired, revoked, unanswered |
-| `shared/test-database.ts` | Test database address, localhost-only guard, `resetDatabase()` |
-| `shared/test-redis.ts` | Test Redis address, localhost-only guard, `resetRedis()` |
+| `shared/test-env.ts` | `TEST_ENV`, the variables in `.env.test` |
+| `shared/test-database.ts` | Test database address from `.env.test`, localhost-only guard, `resetDatabase()` |
+| `shared/test-redis.ts` | Test Redis address from `.env.test`, localhost-only guard, `resetRedis()` |
 | `shared/database-setup.ts` | The database and Redis setup in the diagrams above |
 | `vitest/setup.ts` | Runs before every Vitest file: mocks Sentry (`sentryReports()`), `@/lib/notify` while still defining kinds for real (`sentNotifications()`, the kind name and data of each `notify()` call in the current test), and `next/headers` (`setRequestCookies()`), and silences error and warning logs (`loggedErrors()`, `loggedWarnings()`) |
-| `vitest/database.ts` | Points the db project at the test database and Redis and empties them before each test |
+| `vitest/database.ts` | Empties the test database and Redis before each test of the db project |
+| `vitest/env.ts` | The first setup file of every Vitest file: puts the variables in `.env.test` into the environment before the test file loads any module that reads them |
 | `vitest/definition-files.ts` | The shared check on folders with one definition per file: kinds of notification and Redis models |
 | `vitest/helpers.ts` | `thrown()`, and `importWithEnv()` to reload a module with other variables |
 | `vitest/supabase-auth.ts` | `fakeSupabaseAuth()` starts the fake Auth server for one test file, for any test that needs a signed-in user |
 | `playwright/supabase-auth.ts`, `playwright/supabase-auth-server.mjs` | Fixed Auth address for the build, the server entry, `sessionCookieHeader()` |
-| `playwright/app.ts` | The `NEXT_PUBLIC_APP_NAME` the Playwright build uses |
+| `playwright/server-env.ts` | `playwrightServerEnv()`, the app server's environment: `.env.test`, `PLAYWRIGHT=1`, the fake Auth address |
 | `playwright/sentry.ts` | `captureSentryEvents()` intercepts the browser's reports |
 
 ## What the tests cover
@@ -98,8 +108,10 @@ flowchart TD
 | `lib/redis/client.vitest.test.ts` | Against the test Redis: no client without `REDIS_URL`, one reused connection, and an unreachable server rejected, tried again on the next call, and logged without its address |
 | `lib/redis/model.vitest.test.ts`, `lib/redis/model-files.vitest.test.ts` | Redis model keys, kebab-case names, write options (no TTL by default, a whole-second TTL on request), value checks, and value types, and the layout of the files in `redis/models/` |
 | `config/env.vitest.test.ts` | Environment variable parsing, and when the showcase opens |
+| `config/env.server.vitest.test.ts` | Both env modules load with `.env.example` copied as is. Server variable parsing: empty values as unset, the defaults, the `DATABASE_POOL_MAX` range (a whole number from 1 to 100), and an invalid database address, a non-`https` webhook, or a non-Redis address failing at load with the variable's name |
 | `data/db.vitest.test.ts` | The data access layer reaches the test database, never the one in `.env` |
 | `test-utils/shared/test-database.vitest.test.ts`, `test-utils/shared/test-redis.vitest.test.ts` | The localhost-only guards, the table reset, and the Redis reset |
+| `test-utils/shared/test-env.vitest.test.ts`, `test-utils/playwright/server-env.vitest.test.ts` | `.env.test` lists exactly the variables in `.env.example`, points only at this machine, keeps notifications and the source map upload off, and is the environment of every Vitest test and of the Playwright app server, which changes only `PLAYWRIGHT` and the Supabase variables |
 | `docs/docs.vitest.test.ts` | Docs, the AGENTS.md structure tree, environment variable lists, the two skill folders, and the CLAUDE.md list of skills and subagents stay in step (see [Writing these docs](README.md#keeping-docs-current)) |
 | `.claude/hooks/*.vitest.test.ts` | The subagent hooks block the docs writer's edits outside the docs Markdown, and every Bash command but the read-only ones the subagents share, including git options that write a file when quoted, abbreviated, or brace-expanded |
 | `app/(design-system)/components/showcase.vitest.test.ts` | Every component in `components/ui/` and `components/shared/` is in the showcase, and every card is registered |
@@ -110,12 +122,14 @@ flowchart TD
 
 | File | Role |
 | --- | --- |
-| `vitest.config.mts` | Vitest projects `unit` and `db` |
-| `playwright.config.ts` | Fake Auth server, `PLAYWRIGHT=1` build, test database and Redis |
+| `.env.test` | The environment of every test |
+| `vitest.config.mts` | Vitest projects `unit` and `db`, and the setup files every test runs |
+| `playwright.config.ts` | Fake Auth server, `PLAYWRIGHT=1` build started with `.env.test`, localhost checks |
 | `docker-compose.test.yaml` | The local test database and test Redis |
 | `test-utils/` | Shared setup and helpers |
 | `app/playwright/` | Pages built only for Playwright |
 
 ## Related rules
 
-- [Commands](../AGENTS.md#commands): test file naming, shared helpers, what tests run against, Vitest projects, when to run which test
+- [Commands](../AGENTS.md#commands): test file naming, shared helpers, what tests run against, `.env.test`, Vitest projects, when to run which test
+- [Environment variables](../AGENTS.md#environment-variables): a test value in `.env.test` for every new variable

@@ -1,11 +1,11 @@
 import { Client } from "pg";
+import { TEST_ENV } from "./test-env";
 
 /**
- * The test database. Defaults to the Postgres in docker-compose.test.yaml; CI starts a service container at the same address.
- * Set `TEST_DATABASE_URL` to use another one. The app's `DATABASE_URL` is never reused.
+ * The test database: `DATABASE_URL` in `.env.test`, the Postgres in docker-compose.test.yaml (CI starts a service
+ * container at the same address). The one in .env is never used.
  */
-export const TEST_DATABASE_URL =
-  process.env.TEST_DATABASE_URL || "postgresql://postgres:postgres@localhost:5433/app_test";
+export const TEST_DATABASE_URL = TEST_ENV.DATABASE_URL;
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
@@ -13,7 +13,7 @@ const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 export function assertLocalDatabase(url: string): void {
   const { hostname } = new URL(url);
   if (!LOCAL_HOSTS.has(hostname)) {
-    throw new Error(`Refusing to use a non-local test database (${hostname}). TEST_DATABASE_URL must point to localhost.`);
+    throw new Error(`Refusing to use a non-local test database (${hostname}). DATABASE_URL in .env.test must point to localhost.`);
   }
 }
 

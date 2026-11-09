@@ -84,7 +84,7 @@ Each model lives in its own file in `redis/models/`, exported as `<Name>Model`, 
 ## Redis in development and tests
 
 - In development Redis is off until `REDIS_URL` is set. `pnpm docker:redis` starts a local Redis on port 6379, limited to 256 MB (see [Compose](delivery.md#compose)).
-- Tests use a real local Redis on port 6380, limited to 64 MB (`TEST_REDIS_URL` overrides it, only with another localhost address), emptied before each test of the Vitest `db` project (see [Test database setup](testing.md#test-database-setup)). `data/` tests and the client's own test run in that project, and Playwright starts the app with the test Redis as its `REDIS_URL`.
+- Tests use a real local Redis on port 6380, limited to 64 MB, the `REDIS_URL` in `.env.test`, emptied before each test of the Vitest `db` project (see [Test database setup](testing.md#test-database-setup)). `data/` tests and the client's own test run in that project, and Playwright starts the app with the test Redis as its `REDIS_URL`.
 
 ## Key files
 
@@ -103,4 +103,4 @@ Each model lives in its own file in `redis/models/`, exported as `<Name>Model`, 
 - [Redis](../AGENTS.md#redis): optional Redis as a cache with no permanent keys, the memory limit and eviction policy, the data access layer only, model files, keys, key expiry, commands that scan or clear the server
 - [Security boundary](../AGENTS.md#security-boundary-client--server): the data access layer, which covers Redis as it covers the database
 - [Commands](../AGENTS.md#commands): the test Redis, the Vitest `db` project, the Redis image tags, state shared across instances
-- [Environment variables](../AGENTS.md#environment-variables): server-only variables, the test-only `TEST_REDIS_URL`
+- [Environment variables](../AGENTS.md#environment-variables): server-only variables, the test value in `.env.test`

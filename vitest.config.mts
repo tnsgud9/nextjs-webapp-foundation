@@ -19,6 +19,8 @@ const DB_TESTS = [
  * - `db`: tests against the test database and test Redis (docker-compose.test.yaml). Tables and Redis are emptied
  *   before each test, so files run one at a time. If either is unreachable they fail instead of being skipped.
  *
+ * Every test runs with the variables in `.env.test` (test-utils/vitest/env.ts), never those in .env.
+ *
  * `server-only` / `client-only` are guards only the Next.js bundler understands; importing them in Node fails.
  * Tests replace them with empty modules, and the Next.js build enforces the guards.
  */
@@ -33,8 +35,9 @@ export default defineConfig({
   ],
   resolve: { tsconfigPaths: true },
   test: {
-    // Shared mocks (Sentry, next/headers) and log silencing. Test helpers live in test-utils/<tool>/.
-    setupFiles: ["test-utils/vitest/setup.ts"],
+    // The test environment (.env.test), then shared mocks (Sentry, next/headers, notify) and log silencing.
+    // Test helpers live in test-utils/<tool>/.
+    setupFiles: ["test-utils/vitest/env.ts", "test-utils/vitest/setup.ts"],
     restoreMocks: true,
     unstubEnvs: true,
     unstubGlobals: true,

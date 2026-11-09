@@ -36,7 +36,7 @@ export default async function setup(): Promise<void> {
     );
   }
 
-  // The Prisma CLI connects with DIRECT_URL. The value passed here wins over the one in .env.
+  // The Prisma CLI connects with DIRECT_URL and loads .env itself; the value passed here wins over the one there.
   const prismaEnv = { ...process.env, DIRECT_URL: TEST_DATABASE_URL };
   try {
     execSync("pnpm exec prisma migrate deploy", { env: prismaEnv, stdio: "pipe" });

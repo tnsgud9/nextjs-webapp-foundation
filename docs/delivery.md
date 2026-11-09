@@ -48,7 +48,8 @@ Some packages must match each other, so they move in one update:
 - `config/env.ts` (public) and `config/env.server.ts` (server-only) parse the variables with zod when the module loads, so a bad value fails at start-up, not deep in a request.
 - An empty value (`FOO=`) counts as unset, so optional integrations stay off until they are filled in. `REDIS_URL` is one: without it the app runs without Redis (see [Redis](redis.md)).
 - Next.js replaces each `NEXT_PUBLIC_*` with its value at build time. Each one is written out in full in `config/env.ts`, and values derived from them, such as whether Supabase is on or the showcase is open, are fixed per build.
-- `.env.example` lists every variable with its purpose.
+- `.env.example` lists every variable with its purpose, and `.env.test` gives each the value tests run with (see [Testing](testing.md#the-test-environment)).
+- Every value in `.env.example` is empty, with example formats in comments, so a copy runs as is with every integration off. A placeholder value would fail that validation wherever the server variables load: in the Sentry setup at server start, and through the logger in the proxy, which runs before pages and API calls.
 
 ## Docker image
 
@@ -67,7 +68,7 @@ flowchart LR
 
 ## Variables at build and run time
 
-Variables are never listed one by one in `Dockerfile` or Compose, so adding one never touches those files. A variable app code reads goes in `.env.example`, the zod schema, and the README table; one Next.js reads itself, such as `NEXT_DEPLOYMENT_ID`, has no schema entry (see the last point below).
+Variables are never listed one by one in `Dockerfile` or Compose, so adding one never touches those files. A variable app code reads goes in `.env.example`, `.env.test`, the zod schema, and the README table; one Next.js reads itself, such as `NEXT_DEPLOYMENT_ID`, has no schema entry (see the last point below).
 
 ```mermaid
 flowchart LR
@@ -126,4 +127,4 @@ The app can run as several instances behind a load balancer without any extra se
 ## Related rules
 
 - [Commands](../AGENTS.md#commands): pnpm, release age, dependency updates, verification, Node pinning, CI and Docker files, the Postgres and Redis image tags, multiple instances
-- [Environment variables](../AGENTS.md#environment-variables): the env modules and their build-time exceptions, public variables, `.env.example`
+- [Environment variables](../AGENTS.md#environment-variables): the env modules and their build-time exceptions, public variables, `.env.example` and `.env.test`

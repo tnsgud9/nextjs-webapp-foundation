@@ -38,7 +38,7 @@ A web application built on the Next.js App Router. UI components, environment va
 
 ## Environment variables
 
-Copy `.env.example` to `.env`. The Prisma CLI loads only `.env` through `dotenv`, so keep the database variables in `.env`, not `.env.local`.
+Copy `.env.example` to `.env`. The Prisma CLI loads only `.env` through `dotenv`, so keep the database variables in `.env`, not `.env.local`. Tests take no value from `.env`: they run with the committed `.env.test`, which sets every variable in `.env.example` (an empty one stays unset) and needs no change (see [Testing](docs/testing.md#the-test-environment)).
 
 | Variable | Purpose |
 | --- | --- |
@@ -56,7 +56,7 @@ Copy `.env.example` to `.env`. The Prisma CLI loads only `.env` through `dotenv`
 | `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` | Build only, and only when instances run separate builds of the same version: a shared base64 AES key so a Server Action works on every build. A secret. Instances started from one image need none. |
 | `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT` | Build only: source map upload to Sentry, read by the Sentry build plugin. Set them in the build environment; leave empty to skip the upload. |
 
-Application code never reads `process.env` directly; it goes through the modules below. Invalid values surface as zod errors when the module loads. The exceptions are build-time values outside the app code: `next.config.ts` (`CI`, `PLAYWRIGHT`, `NEXT_OUTPUT_STANDALONE`) and the Sentry build plugin (`SENTRY_*`), `NODE_ENV` (set and inlined by Next.js), and `NEXT_DEPLOYMENT_ID` and `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` (read by Next.js during the build), and the test-only `TEST_DATABASE_URL` and `TEST_REDIS_URL`.
+Application code never reads `process.env` directly; it goes through the modules below. Invalid values surface as zod errors when the module loads. The exceptions are build-time values outside the app code: `next.config.ts` (`CI`, `PLAYWRIGHT`, `NEXT_OUTPUT_STANDALONE`) and the Sentry build plugin (`SENTRY_*`), `NODE_ENV` (set and inlined by Next.js), and `NEXT_DEPLOYMENT_ID` and `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` (read by Next.js during the build).
 
 - `config/env.ts` — public variables (`NEXT_PUBLIC_*`)
 - `config/env.server.ts` — server-only variables. Anything that must not reach the client bundle belongs here.
@@ -101,7 +101,7 @@ How each part works, with diagrams, lives in [docs/](docs/README.md). The rules 
 | [Errors](docs/errors.md) | Problems, error handlers, client error handling, Sentry, the health check |
 | [Logging](docs/logging.md) | Structured server logs, request IDs, what is never logged, log collection |
 | [Notifications](docs/notifications.md) | Server notifications to a chat service: kinds of notification, topics and destinations, providers, best-effort delivery |
-| [Testing](docs/testing.md) | Test tools, the test database, the fake Auth server, shared helpers |
+| [Testing](docs/testing.md) | Test tools, the test environment, the test database, the fake Auth server, shared helpers |
 | [Delivery](docs/delivery.md) | CI, supply chain, dependency updates, environment variables, the Docker image, Compose, multiple instances |
 | [Coding agents](docs/agents.md) | Instruction files, skills, subagents, hooks, machine checks, the docs and endpoint review flows |
 

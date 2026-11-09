@@ -59,8 +59,14 @@ describe("bypass attempts outside data/", () => {
     ["relative import of db from lib/server/", "lib/server/probe.ts", 'import { db } from "../db";\nexport const x = db;\n'],
     ["a generated Prisma module other than client", "components/probe.ts", 'import { getPrismaClientClass } from "@/prisma/internal/class";\nexport const x = getPrismaClientClass;\n'],
     ["relative import of server env", "config/probe.ts", 'import { serverEnv } from "./env.server";\nexport const x = serverEnv;\n'],
+    ["server env in a config test other than its own", "config/env.vitest.test.ts", 'export const x = () => import("./env.server");\n'],
   ])("blocks %s", async (_name, file, code) => {
     expect(await violations(file, code)).toBeGreaterThan(0);
+  });
+
+  it("lets only the server env module's own test load it", async () => {
+    expect(await violations("config/env.server.vitest.test.ts", 'export const x = () => import("./env.server");\n')).toBe(0);
+    expect(await violations("config/env.server.vitest.test.ts", DYNAMIC_DB)).toBeGreaterThan(0);
   });
 });
 

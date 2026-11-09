@@ -1,5 +1,5 @@
-# Test-only Postgres and Redis for the Vitest `db` project and Playwright (the default addresses in
-# test-utils/shared/test-database.ts and test-redis.ts). Start and stop them with `pnpm test:db:up` / `pnpm test:db:down`.
+# Test-only Postgres and Redis for the Vitest `db` project and Playwright (the addresses in .env.test). Start and stop
+# them with `pnpm test:db:up` / `pnpm test:db:down`.
 # The development and production services are unrelated to them. Data lives only in memory and disappears when the
 # containers stop.
 # Keep Postgres on the same major version as Supabase. Change each image together with the CI service container
@@ -25,7 +25,7 @@ services:
       timeout: 5s
       retries: 20
 
-  # Test-only Redis for the Vitest `db` project (the default address in test-utils/shared/test-redis.ts). No
+  # Test-only Redis for the Vitest `db` project and Playwright (REDIS_URL in .env.test). No
   # persistence. Change the image together with the CI service container and docker-compose.yaml.
   redis:
     image: redis:8-alpine
