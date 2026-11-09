@@ -9,7 +9,13 @@ import { beforeAll, describe, expect, it } from "vitest";
  */
 const root = import.meta.dirname;
 const eslint = new ESLint({ cwd: root });
-const BOUNDARY_RULES = new Set(["@typescript-eslint/no-restricted-imports", "no-restricted-syntax", "notify/call-sites"]);
+const BOUNDARY_RULES = new Set([
+  "@typescript-eslint/no-restricted-imports",
+  "project/dynamic-imports",
+  "project/db-usage",
+  "project/entry-exports",
+  "project/notify-imports",
+]);
 
 // The first lint takes seconds to load the config and plugins and can exceed a single test's 5-second
 // timeout on a cold disk cache, so it is warmed up here with a longer timeout.

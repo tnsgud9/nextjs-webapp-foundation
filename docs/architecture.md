@@ -62,12 +62,14 @@ Solid arrows are allowed imports; dashed arrows fail the build.
 | Shared code | none, and it imports no guarded module | `lib/problem.ts`, `lib/csp.ts`, `config/env.ts` |
 | Client-only code | `import "client-only"` | `lib/sentry/client.ts`, modules that need browser-only APIs |
 
-ESLint adds the import rules a guard cannot express: who may import the Prisma Client, Prisma values, server secrets (also the server env module's own test, which loads it with test values), the Redis client (only `data/`, like the Prisma Client), and the `redis` package (only `lib/redis/` and the test Redis helpers). Its rules match the end of the import path, also catch dynamic `import()` / `require()`, and are themselves tested in `eslint.config.vitest.test.ts`. A separate rule limits where the notify module is imported, so only entry points send notifications (see [Notifications](notifications.md#from-the-caller-to-the-chat-service)).
+ESLint adds the import rules a guard cannot express: who may import the Prisma Client, Prisma values, server secrets (also the server env module's own test, which loads it with test values), the Redis client (only `data/`, like the Prisma Client), and the `redis` package (only `lib/redis/` and the test Redis helpers). Its rules match a module by its import path (aliased or relative paths by their end), also catch dynamic `import()` / `require()`, and are themselves tested in `eslint.config.vitest.test.ts`. A separate rule limits where the notify module is imported, so only entry points send notifications (see [Notifications](notifications.md#from-the-caller-to-the-chat-service)).
 
 ESLint also checks how Server Actions and Route Handlers are exported, so neither can skip the error handler and its Problem mapping and reporting ([Server endpoints](../AGENTS.md#server-endpoints) has the rule; see [Errors](errors.md#server-pieces) for the handlers):
 - An export the rule cannot see through, such as an alias or a re-export, is rejected rather than trusted.
 - In route files, named exports other than HTTP methods, such as route config, are not checked, while default and export-all exports are rejected.
 - Route files keep the same server boundary rules as the rest of `app/`.
+
+In `eslint.config.mjs`, static boundary imports use `@typescript-eslint/no-restricted-imports`, and each other check is the built-in syntax restriction under its own name: `project/dynamic-imports`, `project/db-usage`, `project/entry-exports`, and `project/notify-imports`. A config block replaces a rule's whole setting for its files, so with one rule per concern a block changes one check without restating the others. One block gives every file the checks it shares; later blocks match narrower paths and change or add checks for them, such as `project/db-usage`, which checks how `data/` uses `db` (see [Security boundary](../AGENTS.md#security-boundary-client--server)). A boundary block names the restricted modules its paths may import, and blocks the rest.
 
 ## Client-side data
 
@@ -97,7 +99,7 @@ ESLint also checks how Server Actions and Route Handlers are exported, so neithe
 | `lib/problem.ts` | Error contract shared by server and client |
 | `lib/ky.ts`, `lib/query-client.ts`, `components/query-provider.tsx` | HTTP client and TanStack Query |
 | `config/env.ts`, `config/env.server.ts` | Public and server-only environment variables |
-| `eslint.config.mjs` | The import boundary rules, the notification call-site rule, and the Server Action and Route Handler export rules |
+| `eslint.config.mjs` | The import boundary rules, how `data/` uses `db`, the notification import rule, and the Server Action and Route Handler export rules |
 | `app/layout.tsx` | Root layout and providers |
 | `components/ui/`, `components/shared/`, `components.json` | shadcn source and derived components |
 | `hooks/use-mobile.ts`, `hooks/use-highlighted-code.ts`, `lib/highlighter.tsx` | shadcn source outside `components/ui/` |

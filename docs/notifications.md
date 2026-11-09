@@ -23,13 +23,13 @@ flowchart TD
 - Neither throws. A notification is a side effect of the work that caused it, so its failure must not fail that work; it is logged instead.
 - Delivery is best effort: a failed send is not retried later. A normal stop waits for pending sends (see [Multiple instances](delivery.md#multiple-instances)), but a crash, or a shutdown grace period too short for them to finish, loses them. There is no durable outbox, which is why the [Notifications](../AGENTS.md#notifications) rules keep anything that must not be lost out of it.
 - An endpoint that notifies on every call can flood the channel, so it falls under [rate limiting](../AGENTS.md#security-boundary-client--server).
-- Only entry points know whether their `data/` call succeeded, so ESLint (`notify/call-sites`) lets app code reach the notify module in one way only: `import { notify }`, in a file that starts with `"use server"` or a Route Handler file.
+- Only entry points know whether their `data/` call succeeded, so ESLint (`project/notify-imports`) lets app code reach the notify module in one way only: `import { notify }`, in a file that starts with `"use server"` or a Route Handler file.
 - Every other way in is rejected in every app file, entry points included: a namespace or default import, a dynamic `import()` or `require()` with a string or template literal, a re-export from the module, and importing `sendNotification()`.
 - The module's own files (`notifier.ts`, `providers/`, `kind.ts`, any `/notify/<file>` but `index`, aliased or relative) give only types, through an `import type` or a type-only re-export, in every app file, entry points included, so no code builds a sender of its own around the notifier or a provider.
 - `defineNotification()` and the types import anywhere from `@/lib/notify`. `lib/notify/`, `test-utils/`, and test files are exempt.
 - The module is matched by the end of its path (`/notify` or `/notify/index`), aliased or relative, so a relative `./notify` from `lib/` is caught too.
 - Left to review: whether `notify()` runs after the `data/` call succeeds.
-- The check is the built-in syntax restriction registered under its own name, because the boundary lint blocks set that rule per folder, and a later block would replace or turn off the selectors.
+- The check is a rule of its own, so the Route Handler block can drop the "only in `"use server"` files" part, and the exempt files can turn the check off, without touching the other lint checks (see [Architecture](architecture.md#serverclient-boundary)).
 
 ## Kinds of notification
 
