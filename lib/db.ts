@@ -6,7 +6,9 @@ import { PrismaClient } from "@/prisma/client";
 /**
  * The single Prisma Client entry point (server-only).
  *
- * - Serverless gives every instance its own pool, so `max` stays small; concurrency scales with instances.
+ * - Every instance (a container or a serverless function) has its own pool of `DATABASE_POOL_MAX`
+ *   connections (default 3), so concurrency scales with instances. Keep instances × that value within
+ *   the pooler's client limit.
  * - Idle connections close quickly so a suspended instance does not hold them.
  * - The transaction pooler switches connections per query, so named prepared statements cannot be used.
  *   The adapter uses unnamed statements by default; do not enable `statementNameGenerator`.
@@ -20,7 +22,7 @@ function createPrismaClient(): PrismaClient {
   }
   const adapter = new PrismaPg({
     connectionString: serverEnv.databaseUrl,
-    max: 3,
+    max: serverEnv.databasePoolMax,
     idleTimeoutMillis: 5_000,
   });
   return new PrismaClient({ adapter });

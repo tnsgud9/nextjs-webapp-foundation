@@ -1,6 +1,6 @@
 # Delivery
 
-What CI checks, how dependencies are updated, how environment variables are read, how the production image is built, and how variables reach the build and the running app.
+What CI checks, how dependencies are updated, how environment variables are read, how the production image is built, how variables reach the build and the running app, and what running several instances takes.
 
 ## CI
 
@@ -65,12 +65,12 @@ flowchart LR
 
 ## Variables at build and run time
 
-Variables are never listed one by one in `Dockerfile` or Compose, so adding a variable changes only `.env.example` and the zod schema.
+Variables are never listed one by one in `Dockerfile` or Compose, so adding one never touches those files. A variable app code reads goes in `.env.example`, the zod schema, and the README table; one Next.js reads itself, such as `NEXT_DEPLOYMENT_ID`, has no schema entry (see the last point below).
 
 ```mermaid
 flowchart LR
   Env["Env file"] -->|"BuildKit secret build-env"| Mount["Build-time env file, during the build only"]
-  Mount --> Bundle["Public variables inlined into the bundle; Sentry upload token"]
+  Mount --> Bundle["Public variables and the deployment ID built in; Sentry upload token"]
   Env -->|"env_file"| Runtime["Container environment at runtime"]
   Runtime --> Server["Server-only values such as DATABASE_URL"]
 ```
@@ -79,16 +79,29 @@ flowchart LR
 - A secret mount never lands in an image layer, and Next.js does not copy `.env.production.local` into the standalone output.
 - Building without the secret, as CI does, produces an image with every optional variable unset.
 - Server-only values stay out of the image and can change without a rebuild.
+- `NEXT_DEPLOYMENT_ID` and `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` are read by Next.js itself during `next build`, not by app code. Next.js loads the env files first, so setting them in `build-env` is enough.
 
 ## Compose
 
 | Use | Command | Notes |
 | --- | --- | --- |
 | Development database | `pnpm docker:db` | Listens on `127.0.0.1:5432` only; data persists in the `db-data` volume. Point `.env` at it as in `.env.example`, create the schema with `pnpm db:migrate`, and run the app on the host with `pnpm dev` |
-| Production image as a service | `pnpm docker:up` | Needs `.env`. Reads `DATABASE_URL` unchanged, so it must be reachable from inside a container; `localhost` there is the container itself. Apply migrations first with `pnpm db:deploy` |
+| Production image as a service | `pnpm docker:up` | Listens on `127.0.0.1:3000` only. Needs `.env`. Reads `DATABASE_URL` unchanged, so it must be reachable from inside a container; `localhost` there is the container itself. Apply migrations first with `pnpm db:deploy`. Stopping it allows 30 seconds (`stop_grace_period`) before the container is killed |
 | Test database | `pnpm test:db:up` / `test:db:down` | Port 5433, in-memory data, its own Compose project |
 
 The development project is named after the folder and the test project after `name` in `package.json`, so separate projects never share containers or volumes.
+
+## Multiple instances
+
+The app can run as several instances behind a load balancer without any extra service. What each deployment must do is in the [Commands](../AGENTS.md#commands) rule on multiple instances; this table gives how each part works and why.
+
+| Concern | How it works | Why |
+| --- | --- | --- |
+| Deployment ID | `NEXT_DEPLOYMENT_ID` in `build-env`, one value per deployment such as the commit SHA, the same on every instance. Next.js adds it to asset URLs and navigation headers | During a rolling deployment, a client that reaches an instance of another deployment does a full reload instead of mixing versions. Next.js does not route by it; keeping a client on one deployment is up to the host |
+| Server Action key | Next.js generates a new key per build and builds it in, so instances started from one image already share it. `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` in `build-env` is needed only when instances run separate builds of the same version | The key salts each action's ID and encrypts the values an action closes over, so a build with another key neither finds nor decrypts the actions of this one |
+| Database connections | Every instance has its own pool of `DATABASE_POOL_MAX` connections | The pooler counts all of them against its client limit; see [Connections](data-layer.md#connections) |
+| Shutdown | The standalone server handles SIGTERM and SIGINT itself: it closes the server, lets in-flight requests and pending `after()` callbacks finish, then exits. Compose gives the app container 30 seconds | A platform that kills the process sooner loses that work, such as [notifications](notifications.md) still being sent |
+| Shared state | Nothing instances must share lives in process memory. There is no rate limiting yet, and pages render dynamically for the per-request CSP nonce, so there is no page cache to keep in step | There is no shared store or shared cache handler. The [rate limiting](../AGENTS.md#security-boundary-client--server) rule needs a shared store once the first limit is added; a cache handler is the Next.js extension point if cached pages are added |
 
 ## Key files
 
@@ -107,5 +120,5 @@ The development project is named after the folder and the test project after `na
 
 ## Related rules
 
-- [Commands](../AGENTS.md#commands): pnpm, release age, dependency updates, verification, Node pinning, CI and Docker files
-- [Environment variables](../AGENTS.md#environment-variables): the env modules, public variables, `.env.example`
+- [Commands](../AGENTS.md#commands): pnpm, release age, dependency updates, verification, Node pinning, CI and Docker files, multiple instances
+- [Environment variables](../AGENTS.md#environment-variables): the env modules and their build-time exceptions, public variables, `.env.example`

@@ -40,6 +40,8 @@ services:
     ports:
       - "127.0.0.1:3000:3000"
     restart: unless-stopped
+    # Time to finish in-flight requests and pending after() work, such as notifications, after SIGTERM.
+    stop_grace_period: 30s
 
 volumes:
   db-data:

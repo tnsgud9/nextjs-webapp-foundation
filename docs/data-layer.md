@@ -29,7 +29,9 @@ flowchart LR
   Session --> PG
 ```
 
-- The app connects through `lib/db.ts`, which holds the single Prisma Client. Each serverless instance keeps a small pool, and idle connections close quickly.
+- The app connects through `lib/db.ts`, which holds the single Prisma Client. Every instance, a container or a serverless function, has its own pool of `DATABASE_POOL_MAX` connections (default 3, a whole number from 1 to 100), so concurrency grows with the number of instances rather than with the pool.
+- The pooler counts every instance's connections against its client limit, which is why the [Commands](../AGENTS.md#commands) rule on multiple instances keeps instances times `DATABASE_POOL_MAX` within it. See [Multiple instances](delivery.md#multiple-instances).
+- Idle connections close after five seconds, so a suspended instance does not hold them.
 - The CLI connects through `prisma7.config.ts`, which reads `DIRECT_URL` straight from the environment so `prisma generate` still works in builds without it.
 - The transaction pooler does not support named prepared statements; the adapter avoids them by default.
 - Outside production the client lives on `globalThis`, so hot reloads do not pile up pools.
@@ -76,9 +78,10 @@ Prisma does not rely on those grants, so server code is unaffected. To expose a 
 | `prisma/models.vitest.test.ts` | The model convention check |
 | `prisma/migrations/` | Migrations, created by the first `pnpm db:migrate` |
 | `prisma7.config.ts` | Prisma CLI config |
-| `config/env.server.ts` | `DATABASE_URL` |
+| `config/env.server.ts` | `DATABASE_URL`, `DATABASE_POOL_MAX` |
 
 ## Related rules
 
 - [Security boundary](../AGENTS.md#security-boundary-client--server): data access layer, identity, return values, mass assignment
 - [Database](../AGENTS.md#database): models, migrations, Data API exposure, primary keys, users, conventions
+- [Commands](../AGENTS.md#commands): multiple instances, for the pool size

@@ -43,14 +43,17 @@ Copy `.env.example` to `.env`. The Prisma CLI loads only `.env` through `dotenv`
 | `NEXT_PUBLIC_APP_NAME` | App name in page titles and the UI. Defaults to `Web App`. Read at build time, so rebuild after changing it. |
 | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Supabase clients. Leave empty to disable the Supabase integration. |
 | `DATABASE_URL` | App runtime (Prisma Client). Supavisor **transaction pooler (6543)**. Leave it and `DIRECT_URL` empty to run without a database. |
+| `DATABASE_POOL_MAX` | Connections each app instance may open. Defaults to `3`. Keep the number of instances times this value within the pooler's client limit. |
 | `DIRECT_URL` | Prisma CLI (migrate, etc.). **Session pooler (5432)**. The direct host is IPv6-only. |
 | `SERVICE_NAME`, `APP_ENV` | `service.name` and `deployment.environment.name` in every server log line. Default to `name` in `package.json`, and to `NODE_ENV`. |
 | `NOTIFY_SLACK_WEBHOOK_URL` | Incoming webhook (`https` only) of the chat channel that receives server notifications; every topic goes there for now. A secret: anyone holding it can post to the channel. Leave empty to skip notifications. |
 | `NEXT_PUBLIC_SENTRY_DSN` | Sentry error reporting from the browser and the server. Leave empty to disable Sentry; errors are then only logged on the server. |
 | `NEXT_PUBLIC_DESIGN_SYSTEM` | `1` opens the `/design-system` showcase in a production build (for example on a preview deployment). Left empty, it answers 404 everywhere except the development server. Read at build time. |
+| `NEXT_DEPLOYMENT_ID` | Build only: an identifier for the deployment, such as the commit SHA, the same for every instance. During a rolling deployment, a client that reaches an instance of another deployment reloads instead of mixing versions. |
+| `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` | Build only, and only when instances run separate builds of the same version: a shared base64 AES key so a Server Action works on every build. A secret. Instances started from one image need none. |
 | `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT` | Build only: source map upload to Sentry, read by the Sentry build plugin. Set them in the build environment; leave empty to skip the upload. |
 
-Application code never reads `process.env` directly; it goes through the modules below. Invalid values surface as zod errors when the module loads. The exceptions are build-time values outside the app code: `next.config.ts` (`CI`, `PLAYWRIGHT`, `NEXT_OUTPUT_STANDALONE`) and the Sentry build plugin (`SENTRY_*`), `NODE_ENV` (set and inlined by Next.js), and the test-only `TEST_DATABASE_URL`.
+Application code never reads `process.env` directly; it goes through the modules below. Invalid values surface as zod errors when the module loads. The exceptions are build-time values outside the app code: `next.config.ts` (`CI`, `PLAYWRIGHT`, `NEXT_OUTPUT_STANDALONE`) and the Sentry build plugin (`SENTRY_*`), `NODE_ENV` (set and inlined by Next.js), `NEXT_DEPLOYMENT_ID` and `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` (read by Next.js during the build), and the test-only `TEST_DATABASE_URL`.
 
 - `config/env.ts` — public variables (`NEXT_PUBLIC_*`)
 - `config/env.server.ts` — server-only variables. Anything that must not reach the client bundle belongs here.
@@ -94,7 +97,7 @@ How each part works, with diagrams, lives in [docs/](docs/README.md). The rules 
 | [Logging](docs/logging.md) | Structured server logs, request IDs, what is never logged, log collection |
 | [Notifications](docs/notifications.md) | Server notifications to a chat service: kinds of notification, topics and destinations, providers, best-effort delivery |
 | [Testing](docs/testing.md) | Test tools, the test database, the fake Auth server, shared helpers |
-| [Delivery](docs/delivery.md) | CI, supply chain, dependency updates, environment variables, the Docker image, Compose |
+| [Delivery](docs/delivery.md) | CI, supply chain, dependency updates, environment variables, the Docker image, Compose, multiple instances |
 | [Coding agents](docs/agents.md) | Instruction files, skills, subagents, hooks, machine checks, the docs and endpoint review flows |
 
 Business domain pages are listed under [Domains](docs/README.md#domains).
@@ -105,6 +108,7 @@ Business domain pages are listed under [Domains](docs/README.md#domains).
 2. Run the app in the same region as the Supabase project.
 3. `postinstall` generates the Prisma Client during the build. Run migrations separately with `pnpm db:deploy`.
 4. For the Docker image, see [Delivery](docs/delivery.md).
+5. To run more than one instance, set `NEXT_DEPLOYMENT_ID` in the build environment (and `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` when instances run separate builds), size `DATABASE_POOL_MAX` for the number of instances, and give each instance a shutdown grace period. See [Multiple instances](docs/delivery.md#multiple-instances).
 
 ## AI agents
 

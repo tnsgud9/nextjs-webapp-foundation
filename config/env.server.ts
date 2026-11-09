@@ -17,6 +17,11 @@ const serverEnvSchema = z.object({
    * `DIRECT_URL` for migrations is read only by the Prisma CLI, so it is not here.
    */
   DATABASE_URL: z.url().optional(),
+  /**
+   * Connections each app instance may open (`lib/db.ts`). Defaults to 3. Every instance has its own
+   * pool, so the number of instances times this value must stay within the pooler's client limit.
+   */
+  DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(100).optional(),
   /** `service.name` in every log line. Defaults to `name` in package.json. */
   SERVICE_NAME: z.string().optional(),
   /** `deployment.environment.name` in every log line. Defaults to `NODE_ENV`. */
@@ -31,6 +36,7 @@ const serverEnvSchema = z.object({
 const parsed = serverEnvSchema.safeParse({
   // Treat an empty string (`FOO=`) as unset.
   DATABASE_URL: process.env.DATABASE_URL || undefined,
+  DATABASE_POOL_MAX: process.env.DATABASE_POOL_MAX || undefined,
   SERVICE_NAME: process.env.SERVICE_NAME || undefined,
   APP_ENV: process.env.APP_ENV || undefined,
   NOTIFY_SLACK_WEBHOOK_URL: process.env.NOTIFY_SLACK_WEBHOOK_URL || undefined,
@@ -44,6 +50,7 @@ if (!parsed.success) {
 
 export const serverEnv = {
   databaseUrl: parsed.data.DATABASE_URL,
+  databasePoolMax: parsed.data.DATABASE_POOL_MAX ?? 3,
   serviceName: parsed.data.SERVICE_NAME ?? packageName,
   environment: parsed.data.APP_ENV ?? process.env.NODE_ENV ?? "development",
   notifySlackWebhookUrl: parsed.data.NOTIFY_SLACK_WEBHOOK_URL,
