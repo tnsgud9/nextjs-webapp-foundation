@@ -8,6 +8,7 @@ const GUARD_MODULE = "\0next-module-guard";
  */
 const DB_TESTS = [
   "data/**/*.vitest.test.{ts,tsx}",
+  "lib/db.vitest.test.ts",
   "lib/redis/client.vitest.test.ts",
   "test-utils/**/*.vitest.test.{ts,tsx}",
 ];

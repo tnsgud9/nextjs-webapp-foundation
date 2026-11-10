@@ -75,6 +75,15 @@ describe("bypass attempts outside data/", () => {
     expect(await violations("config/env.server.vitest.test.ts", 'export const x = () => import("./env.server");\n')).toBe(0);
     expect(await violations("config/env.server.vitest.test.ts", DYNAMIC_DB)).toBeGreaterThan(0);
   });
+
+  it("lets the Prisma Client module's own test use db and Prisma values, and nothing else", async () => {
+    const FILE = "lib/db.vitest.test.ts";
+    expect(await violations(FILE, QUERY)).toBe(0);
+    expect(await violations(FILE, PRISMA_VALUE)).toBe(0);
+    expect(await violations(FILE, SERVER_ENV)).toBeGreaterThan(0);
+    const redisClient = 'import { getRedis } from "@/lib/redis/client";\nexport const x = getRedis;\n';
+    expect(await violations(FILE, redisClient)).toBeGreaterThan(0);
+  });
 });
 
 describe("domains/ (shared by server and browser)", () => {

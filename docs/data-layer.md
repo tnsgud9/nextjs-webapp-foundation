@@ -38,6 +38,15 @@ flowchart LR
 - Outside production the client lives on `globalThis`, so hot reloads do not pile up pools.
 - The Prisma CLI loads only `.env`, so the database variables stay there, not in `.env.local`.
 
+## Prisma errors without query values
+
+A Prisma error can carry the query's values: a validation error prints the arguments, and a database error quotes the value it rejected, in its message, its stack, and its `meta`. Unexpected errors reach the server log, Sentry, and Next.js's own console output, which would put personal data in them. So `lib/db.ts` removes those values before an error leaves it, and the [Database](../AGENTS.md#database) rules keep it that way.
+
+- A query extension wraps every query: model queries, raw queries, and queries inside interactive transactions. It does not wrap `$transaction` itself or the connection, whose errors carry no query values.
+- Outside development (`NODE_ENV` other than `development`), it rewrites each Prisma error in place. The message becomes a fixed `prisma.<model>.<operation>() failed`, or `prisma.<operation>() failed` for a raw query, with the model name starting in lowercase and the error code in parentheses when there is one; the stack keeps only its frames, and `meta` keeps only names: `modelName`, `target`, `field_name`, `constraint`, and the database error's `kind`, `originalCode`, and `constraint`.
+- It rethrows the same error object, so its class and `code` still decide the 409 or 404 in the error mapping (see [Errors](errors.md#from-a-thrown-error-to-a-response)).
+- In development (`pnpm dev`) the original message stays, for debugging. Errors that are not Prisma errors pass through unchanged.
+
 ## Schema and migrations
 
 - Models live in `prisma/models/<domain>.prisma`. All files merge into one schema, so relations cross files without imports.
@@ -74,7 +83,8 @@ Prisma does not rely on those grants, so server code is unaffected. To expose a 
 | File | Role |
 | --- | --- |
 | `data/` | Data access functions |
-| `lib/db.ts` | Prisma Client and connection pool |
+| `lib/db.ts` | Prisma Client, connection pool, and Prisma errors without query values |
+| `lib/db.vitest.test.ts` | The check that Prisma errors carry no query values |
 | `prisma/schema.prisma`, `prisma/models/` | Schema |
 | `prisma/models.vitest.test.ts` | The model convention check |
 | `prisma/migrations/` | Migrations, created by the first `pnpm db:migrate` |
@@ -84,6 +94,6 @@ Prisma does not rely on those grants, so server code is unaffected. To expose a 
 ## Related rules
 
 - [Security boundary](../AGENTS.md#security-boundary-client--server): data access layer, identity, return values, mass assignment
-- [Database](../AGENTS.md#database): models, migrations, Data API exposure, primary keys, users, conventions
+- [Database](../AGENTS.md#database): models, migrations, Data API exposure, primary keys, users, conventions, Prisma errors without query values
 - [Redis](../AGENTS.md#redis): Redis through the data access layer, with the same checks as the database
 - [Commands](../AGENTS.md#commands): multiple instances, for the pool size

@@ -57,6 +57,7 @@ The request ID ties together every line of one request. The proxy replaces any `
 ## What never reaches the log
 
 - Request bodies, headers, cookies, tokens, query strings, and personal data are never passed to the logger.
+- Outside development, a Prisma error's message, stack, and `meta` hold no query values by the time it is logged, because `lib/db.ts` removes them (see [Data layer](data-layer.md#prisma-errors-without-query-values)). This also covers Next.js's own lines for the same error.
 - As a backstop, attributes whose key looks secret or personal (token, cookie, session, password, webhook, email, API key) are written as `[REDACTED]`, at any depth.
 - Circular values, very deep objects, and values that cannot be serialized never make logging throw; the logger falls back to the plain message.
 
@@ -84,11 +85,13 @@ The pages in `app/playwright/` are built only for Playwright, some of them to fa
 | `proxy.ts` | Sets the request ID |
 | `lib/supabase/auth-deadline.ts` | Logs a Supabase Auth time-out |
 | `lib/redis/client.ts` | Logs a Redis connection error |
+| `lib/db.ts` | Removes query values from Prisma errors before they are logged |
 | `config/env.server.ts` | `SERVICE_NAME` and `APP_ENV` |
 | `test-utils/vitest/setup.ts` | `loggedErrors()` and `loggedWarnings()` read the lines a test printed |
 
 ## Related rules
 
 - [Observability](../AGENTS.md#observability): the logger, what never to log, Sentry
+- [Database](../AGENTS.md#database): Prisma errors without query values
 - [Environment variables](../AGENTS.md#environment-variables): server-only variables
 - [Server endpoints](../AGENTS.md#server-endpoints): error handlers, error mapping

@@ -19,7 +19,7 @@ flowchart TD
   Hook --> Digest["Error page shows the digest"]
 ```
 
-One mapping (`lib/server/error-mapper.ts`) decides which Problem an error becomes, so every entry point answers the same failure the same way. The error handlers only send the Problem out in the shape each entry point needs; they do not authenticate or validate input. Known Prisma errors are a unique violation (409) and a missing record (404).
+One mapping (`lib/server/error-mapper.ts`) decides which Problem an error becomes, so every entry point answers the same failure the same way. The error handlers only send the Problem out in the shape each entry point needs; they do not authenticate or validate input. Known Prisma errors are a unique violation (409) and a missing record (404). The mapping reads only an error's class and `code`, which stay when `lib/db.ts` removes query values from Prisma errors (see [Data layer](data-layer.md#prisma-errors-without-query-values)).
 
 Client input fails as a 400 `validation-failed` `ProblemError`, which the input validation (`lib/server/validation.ts`) builds with `mapValidationError()`. The mapping does not map a raw zod error: client input goes through the input validation, so it never reaches the mapping as one, and a raw zod error comes from the server's own data, such as a stored value or an outside service's response, and is a bug. It takes the unexpected path, so it is reported, and a Route Handler answers 500 with no field details that would point into internal shapes.
 
@@ -83,6 +83,7 @@ Pages have no wrapper, so `loadForPage()` is their counterpart, called around ea
 - Route Handler errors never reach `onRequestError`, because the error handler catches them first. That is why two server paths exist.
 - Without `NEXT_PUBLIC_SENTRY_DSN`, Sentry is not initialized and nothing is sent; the server log still records every unexpected error.
 - Every unexpected error also becomes one structured log line; [Logging](logging.md) covers its fields, the request ID, and how a deployment collects it.
+- Outside development, a Prisma error reaches the log and Sentry without the query's values; see [Data layer](data-layer.md#prisma-errors-without-query-values).
 - Data collection is minimal (`lib/sentry/options.ts`): no user info, cookies, headers, bodies, or query parameters. Performance traces are only sampled.
 - On the server (Node and Edge), outgoing requests to the notification webhook get no span or breadcrumb (`lib/sentry/server.ts`), because the SDK records a request's URL path and the webhook's secret is in its path.
 - With the `SENTRY_*` build variables, the build uploads source maps and then deletes them from the output, so they are never public.

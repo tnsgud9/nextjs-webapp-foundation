@@ -9,7 +9,7 @@ flowchart TD
   Test["pnpm test"] --> Vitest["Vitest"]
   Test --> PW["Playwright"]
   Vitest --> Unit["unit project: no database or Redis, files in parallel"]
-  Vitest --> DbProj["db project: data access, Redis client, and test helper tests, one file at a time"]
+  Vitest --> DbProj["db project: data access, Prisma and Redis clients, and test helper tests, one file at a time"]
   DbProj --> Setup["Database and Redis setup"]
   PW --> Setup
   Setup --> TestDB[("Test Postgres on localhost")]
@@ -111,6 +111,7 @@ flowchart TD
 | `lib/redis/model.vitest.test.ts`, `lib/redis/model-files.vitest.test.ts` | Redis model keys, kebab-case names, write options (no TTL by default, a whole-second TTL on request), value checks, and value types, and the layout of the files in `redis/models/` |
 | `config/env.vitest.test.ts` | Environment variable parsing, and when the showcase opens |
 | `config/env.server.vitest.test.ts` | Both env modules load with `.env.example` copied as is. Server variable parsing: empty values as unset, the defaults, the `DATABASE_POOL_MAX` range (a whole number from 1 to 100), and an invalid database address, a non-`https` webhook, or a non-Redis address failing at load with the variable's name |
+| `lib/db.vitest.test.ts` | Against the test database, the errors of a raw query and of a raw query in an interactive transaction carry no query value, while the class, `code`, and the names in `meta` stay. On errors built in the test, a validation error loses its arguments, a known error's `meta` keeps only names, and any other error passes through unchanged. No model query runs, as the app has no models yet |
 | `data/db.vitest.test.ts` | The data access layer reaches the test database, never the one in `.env` |
 | `test-utils/shared/test-database.vitest.test.ts`, `test-utils/shared/test-redis.vitest.test.ts` | The localhost-only guards, the table reset, and the Redis reset |
 | `test-utils/shared/test-env.vitest.test.ts`, `test-utils/playwright/server-env.vitest.test.ts` | `.env.test` lists exactly the variables in `.env.example`, points only at this machine, keeps notifications and the source map upload off, and is the environment of every Vitest test and of the Playwright app server, which changes only `PLAYWRIGHT` and the Supabase variables |

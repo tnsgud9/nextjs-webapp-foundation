@@ -217,6 +217,12 @@ const eslintConfig = defineConfig([
   },
   { name: "server boundary: lib/db", files: ["lib/db.ts"], rules: boundary(...Object.keys(RESTRICTED)) },
   {
+    // The Prisma Client module's own test runs queries against the test database.
+    name: "server boundary: Prisma Client test",
+    files: ["lib/db.vitest.test.ts"],
+    rules: boundary("db", "prismaValues"),
+  },
+  {
     // The test Redis helpers talk to the test Redis directly, never through the app's client.
     name: "server boundary: test Redis helpers",
     files: ["test-utils/shared/test-redis.ts", "test-utils/shared/test-redis.vitest.test.ts"],
