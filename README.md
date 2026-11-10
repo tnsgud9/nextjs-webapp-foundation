@@ -73,7 +73,7 @@ Application code never reads `process.env` directly; it goes through the modules
 | `pnpm lint` | ESLint |
 | `pnpm typecheck` | Generates the Next.js route types (`next typegen`), then runs `tsc --noEmit`. Works on a fresh clone without a prior build |
 | `pnpm test` | All tests (`test:vitest`, then `test:playwright`) |
-| `pnpm test:vitest` | Vitest (`*.vitest.test.ts`). Needs the test database and Redis (`pnpm test:db:up`) |
+| `pnpm test:vitest` | Vitest (`*.vitest.test.ts`, `*.vitest.test.tsx`). Needs the test database and Redis (`pnpm test:db:up`) |
 | `pnpm test:db:up` / `pnpm test:db:down` | Start / stop the test database and Redis (`docker-compose.test.yaml`). Their data lives in memory and is gone after stopping |
 | `pnpm test:vitest:unit` | Vitest without the database and Redis |
 | `pnpm test:playwright` | Playwright (`*.playwright.test.ts`): builds with `PLAYWRIGHT=1`, starts the app, and drives Chromium. Needs the test database and Redis (`pnpm test:db:up`); run `pnpm exec playwright install chromium` once first |

@@ -20,6 +20,7 @@ docker-compose*.yaml
 # Tests and test tooling. The production build type-checks only app code (tsconfig.build.json), so the image build does not need them.
 test-utils
 **/*.vitest.test.ts
+**/*.vitest.test.tsx
 **/*.playwright.test.ts
 vitest.config.mts
 playwright.config.ts

@@ -7,6 +7,7 @@
     "test-utils",
     "docs",
     "**/*.vitest.test.ts",
+    "**/*.vitest.test.tsx",
     "**/*.playwright.test.ts",
     "vitest.config.mts",
     "playwright.config.ts"

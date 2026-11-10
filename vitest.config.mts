@@ -7,13 +7,15 @@ const GUARD_MODULE = "\0next-module-guard";
  * tests, the Redis client's own test, and the test-utils self-checks.
  */
 const DB_TESTS = [
-  "data/**/*.vitest.test.ts",
+  "data/**/*.vitest.test.{ts,tsx}",
   "lib/redis/client.vitest.test.ts",
-  "test-utils/**/*.vitest.test.ts",
+  "test-utils/**/*.vitest.test.{ts,tsx}",
 ];
 
 /**
- * Vitest config. Runs `*.vitest.test.ts`, which sit next to the code they cover. Unrelated to the Next.js build.
+ * Vitest config. Runs `*.vitest.test.ts` and `*.vitest.test.tsx`, which sit next to the code they cover.
+ * Unrelated to the Next.js build. There is no DOM: a `.tsx` test renders on the server (react-dom/server), and
+ * Playwright covers behaviour in the browser.
  *
  * - `unit`: tests without external dependencies, run file by file in parallel.
  * - `db`: tests against the test database and test Redis (docker-compose.test.yaml). Tables and Redis are emptied
@@ -47,7 +49,7 @@ export default defineConfig({
         test: {
           name: "unit",
           // Test files are split by the tool that runs them; Playwright runs `*.playwright.test.ts`.
-          include: ["**/*.vitest.test.ts"],
+          include: ["**/*.vitest.test.{ts,tsx}"],
           exclude: [...configDefaults.exclude, ...DB_TESTS],
         },
       },

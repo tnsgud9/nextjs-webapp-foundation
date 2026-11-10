@@ -31,6 +31,8 @@ flowchart TD
 
 The fake server's signing key comes from a fixed seed, so the server and the tests agree on it without a key stored in the repository.
 
+Vitest runs `*.vitest.test.ts` and `*.vitest.test.tsx`. There is no DOM: a `.tsx` test renders a component on the server with `react-dom/server` and checks the markup, as `app/not-found.vitest.test.tsx` does, and behaviour in the browser stays with Playwright. `tsconfig.build.json` and `.dockerignore` leave both kinds out of the build.
+
 ## The test environment
 
 Every test runs with the variables in the committed `.env.test`, never those in `.env`, so a developer's own secrets and services never reach a test (see [Commands](../AGENTS.md#commands)). Vitest sets them for every test in its first setup file (`test-utils/vitest/env.ts`), so the config itself loads no project module; Playwright passes them, with `PLAYWRIGHT=1` and the fake Auth server's address, to the app server it builds and starts.
@@ -83,7 +85,7 @@ flowchart TD
 | `vitest/env.ts` | The first setup file of every Vitest file: puts the variables in `.env.test` into the environment before the test file loads any module that reads them |
 | `vitest/definition-files.ts` | The shared check on folders with one definition per file: kinds of notification and Redis models |
 | `vitest/helpers.ts` | `thrown()`, and `importWithEnv()` to reload a module with other variables |
-| `vitest/supabase-auth.ts` | `fakeSupabaseAuth()` starts the fake Auth server for one test file, for any test that needs a signed-in user |
+| `vitest/supabase-auth.ts` | `fakeSupabaseAuth()` starts the fake Auth server for one test file, for any test that needs a signed-in user. `load()` imports the module under test with Supabase pointing at the fake server, and `signIn()` / `signOut()` set the requester's session cookie. Supabase is off in `.env.test` and whether it is on is fixed when a module loads, so a module imported statically sees every caller as signed out |
 | `playwright/supabase-auth.ts`, `playwright/supabase-auth-server.mjs` | Fixed Auth address for the build, the server entry, `sessionCookieHeader()` |
 | `playwright/server-env.ts` | `playwrightServerEnv()`, the app server's environment: `.env.test`, `PLAYWRIGHT=1`, the fake Auth address |
 | `playwright/sentry.ts` | `captureSentryEvents()` intercepts the browser's reports |
@@ -115,7 +117,9 @@ flowchart TD
 | `docs/docs.vitest.test.ts` | Docs, the AGENTS.md structure tree, environment variable lists, the two skill folders, and the CLAUDE.md list of skills and subagents stay in step (see [Writing these docs](README.md#keeping-docs-current)) |
 | `.claude/hooks/*.vitest.test.ts` | The subagent hooks block the docs writer's edits outside the docs Markdown, and every Bash command but the read-only ones the subagents share, including git options that write a file when quoted, abbreviated, or brace-expanded |
 | `app/(design-system)/components/showcase.vitest.test.ts` | Every component in `components/ui/` and `components/shared/` is in the showcase, and every card is registered |
+| `test-utils/vitest/supabase-auth.vitest.test.ts` | `fakeSupabaseAuth()` signs a requester in and out for a module loaded with `load()`, and a module imported without it sees every caller as signed out |
 | `app/global-error.vitest.test.ts` | The root-layout error page shows the digest, never the error |
+| `app/not-found.vitest.test.tsx` | The not-found page, rendered on the server, says the page was not found and links home |
 | `app/app.playwright.test.ts` | In a real browser, against a production build: security headers and nonce, status codes, sign-in handling, session refresh, error pages, Sentry reports, pages downloading only the Pretendard weights they use, characters Pretendard lacks falling back to Noto Sans served from this origin, and a toast shown through the app-wide Toaster |
 
 ## Key files
